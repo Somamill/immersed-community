@@ -1,0 +1,81 @@
+# Japanese subtitle quality
+
+## What improves now
+
+Creator-provided Japanese tracks take priority over YouTube ASR, which takes priority over an unidentified Japanese track. A lower-priority response cannot replace a better one merely because its request finished later. Cached captions remain a fallback while fresh source tracks load. Older parsed caches are invalidated without deleting vocabulary.
+
+Rolling JSON3 append events retain already-spoken text and update it only at the next event's timestamp. Explicit clears end the line. Japanese-only whitespace boundaries are normalized while Latin word spaces are preserved. Display no longer inserts a gap/padding around every learning token. Furigana occupies a separate annotation lane rather than widening the base word. Opening/closing punctuation stays attached to its neighboring word. These are targeted improvements, not a complete native ruby/kinsoku implementation.
+
+The formatter preserves kanji, kana and lexical choices from the source. It does not guess a homophone's kanji from dictionary readings. Words that sound the same can mean different things; a plausible-looking rewrite could teach an incorrect sentence.
+
+## Japanese ASR worker update (0.5.12)
+
+The generated-caption worker now uses ReazonSpeech K2 v2 (`reazonspeech-k2-v2`, int8), a 159M-parameter Japanese Zipformer/RNN-T model with Apache-2.0 weights and software. It is trained on ReazonSpeech broadcast audio. Its official release provides quantized benchmark results on JSUT, Common Voice and TEDxJP, and notes CPU-capable inference without a GPU. [ReazonSpeech K2 model card](https://huggingface.co/reazon-research/reazonspeech-k2-v2) · [official ReazonSpeech v2.1 results and license](https://research.reazon.jp/blog/2024-08-01-ReazonSpeech.html).
+
+A local diagnostic compared Whisper base with K2 int8 on six short clips served by the public `japanese-asr/ja_asr.reazonspeech_test` set. On the provided text, corpus-level CER was 48.7% (57 edits / 117 reference characters) for base and 29.1% (34 / 117) for K2. Several casual speech particles and the name `大橋` improved; the sample is far too small to estimate video accuracy, the supplied reference is not manually verified here, and neither model was tested against the user’s video. K2 decoded the clips in 0.12–0.50 seconds each after a one-time 17.8-second model load in this 2-CPU preview. No audio or transcript from this comparison is shipped in the app.
+
+K2 exposes character timestamps. The worker now decodes the audio in overlapping 27-second chunks, removes the model's 0.9-second silence pad from timestamps, drops duplicated overlap, and groups characters into captions at speech gaps, punctuation, or a short display limit. This improves word-level subtitle timing versus one long cue; these are token-time estimates, not a separate forced-alignment model. Japanese-model output can still mishear names, overlap, slang or code-switching. ReazonSpeech has no speaker diarization in this setup.
+
+YouTube audio access remains blocked from this development preview. Therefore I cannot validate the complete download → K2 → on-device playback path on an actual YouTube conversation here. Native YouTube captions and creator captions also bypass this generated-caption model, and can still contain errors. The next real-world check should compare both native and generated captions against several videos with casual multi-speaker conversation. Fresh subtitle generation remains dependent on the preview's restricted network/source access.
+
+## Typography sources
+
+[W3C Japanese Layout Requirements](https://www.w3.org/TR/jlreq/) and [W3C ruby styling](https://w3c.github.io/i18n-drafts/articles/ruby/styling.en) explain why Japanese spacing, punctuation placement and ruby need different treatment from spaced Latin text. The current React Native renderer approximates these rules while keeping words tappable. A production renderer should be compared on physical iPhones at multiple font sizes, including long readings and narrow screens.
+
+## Word boundaries and lexical fixes (0.5.9)
+
+A concrete analysis defect was reproducible: grouped prefix nouns such as `お名前`, `お勧め`, `再利用` and `超高速` displayed together but used only the prefix as their lookup lemma. They now retain the dictionary-backed compound. Suru inflections of compounds retain that noun lemma too (for example `再利用していました` → `再利用`). This corrects dictionary routing without editing the subtitle spelling.
+
+Timed tracks now receive background boundary analysis in batches of up to 48 cues. An adjacent pair can be joined only when Japanese morphology finds a dictionary-backed token or inflection crossing the old boundary. The gap must be at most 120 ms, the combined interval at most six seconds, and combined text at most 48 UTF-16 units. Sentence-ending punctuation, long pauses, overlapping voices and larger spans prevent joining. The joined cue keeps the original first start, last end and exact concatenation of source characters. A batch carries its final cue forward so the processing boundary does not create another split. This is a conservative heuristic, not a guarantee of correct segmentation or recognition.
+
+The client validates that every returned cue is an ordered, unchanged partition of the input before displaying it. A failed or invalid batch leaves source captions usable. Processing updates progressively and stops when the video/source changes; source caches retain original cues. Joined intervals show the whole phrase across the source interval; they do not add word-level audio alignment. Live DOM-only captions cannot look ahead and do not get this cross-cue repair. Existing speech-recognition/homophone limitations remain.
+
+The UI uses shorter ruby lanes and tighter row spacing while retaining the 26-point base text and tappable words. Browser tests measure row separation on a wrapped Japanese example. Physical iPhone typography and real-video recognition quality still need evaluation.
+
+## Three-model comparison (0.5.13)
+
+The worker now compares ReazonSpeech K2, Whisper Small and Kotoba Whisper on the same audio chunks and delivers progress after each engine. Whole-phrase majority agreement is preferred when present; disagreements keep the default Reazon candidate and remain explicitly unverified. No novel combined sentence is synthesized. Creator tracks stay in priority; automatic tracks can be progressively replaced by generated results when source audio is accessible.
+
+A new six-clip diagnostic used public test rows 6–11, totaling 43.46 seconds and 139 normalized reference characters. Reazon had **22.3% CER**, Kotoba **31.7%**, Whisper Small **47.5%**. The selection policy retained Reazon on all six and also had **22.3% CER**: adding models did **not** demonstrate an accuracy gain over Reazon. Total engine work was 14.15 / 109.01 / 40.47 seconds respectively, including repeated model loading under concurrent browser-test load. All three combined consumed 163.63 seconds for 43.46 seconds of recordings, so this host is **not real-time**. Source metrics and caveats: [asr-comparison.json](asr-comparison.json).
+
+The references were supplied by the dataset and not manually verified. These are short broadcast snippets, not a representative benchmark of the user's natural conversations. Normalization removes punctuation/whitespace/symbols and preserves kanji distinctions; these rates cannot be directly compared with the earlier punctuation-preserving diagnostic.
+
+A separate real worker smoke check on a short recording produced three progressive updates. All three models returned the same complete phrase, with a final matching timed cue. This establishes that the multi-model plumbing runs on audio; it is not evidence of broad accuracy.
+
+The current best measured default remains Reazon. Further accuracy claims need human-checked recordings with slang, overlapping speakers, music and proper names. GPU execution can reduce comparison latency; it does not itself resolve disagreements. Network permission/source-audio access is still required before real YouTube comparison can be tested here.
+
+## Context-aware candidate selection (0.5.14)
+
+A compact Japanese causal language model, [rinna/japanese-gpt2-xsmall](https://huggingface.co/rinna/japanese-gpt2-xsmall), can now score the same speech-model candidates with adjacent caption context. It is a 43.7M-parameter model trained on CC-100/Wikipedia, not a semantic verifier. It does not generate new caption text or search the dictionary for plausible replacement kanji.
+
+Selection keeps the whole original ASR candidate, including its timing. An alternative must be similar in length (80–120%), differ by at most 15% of characters (1–3 character cap), and have a close morphological reading (at most 15% of mora-like reading characters, capped at 2). Kuromoji guards preserve the sequence of proper/unknown tokens, numeric tokens, negative auxiliaries, and auxiliary forms for tense/modality. These protect some names/slang/polarity, not every linguistic nuance.
+
+A change requires at least 1.5 nats per changed character of contextual likelihood improvement and 0.03 per character overall; overriding a speech-model majority requires 3.0 and 0.06 respectively. These are conservative fixed heuristics, not calibrated confidence. Scores normalize punctuation/spacing, condition on up to 64 preceding characters and include up to 40 following characters. Adjacent context comes only from ASR hypotheses, never a gold reference. If all candidates are identical, all alternatives fail the guards, or the model is unavailable, text is retained.
+
+A constructed homophone check selected 公園 over 公演 in a sentence about taking a walk. This is a text-selection smoke check, not a speech-accuracy benchmark. Re-running the frozen six-clip diagnostic caused zero changes: 31/139 errors remained (22.3%). No broad accuracy gain is demonstrated. References are not manually verified. Unrelated diagnostic clips are scored independently, without inventing neighboring conversation context.
+
+Candidate scores, guard decisions and selected alternatives are retained in the comparison report. Settings → About says “context suggests alternative” when the language model changes selection; this is never shown as verified speech. Fluent unusual statements, jokes and known slang can still be judged incorrectly. If all recognizers make the same mistake, this stage cannot repair it. Real YouTube audio access remains blocked here.
+
+## Timing and visible text fixes (0.5.15)
+
+Three identified ways of losing visible words have been fixed: overlapping source windows replacing each other, equal-time generated captions hiding earlier text, and a source sentence crossing the edge of partial generation being discarded. Exact-boundary rolling appends retain their prefix. Quotes, foreign-language fragments and unparsed source spans remain visible.
+
+Display timing adds bounded reading time for very short cues and bridges brief gaps, without moving their starts or delaying the next cue. Explicit clears and long silence still clear the display. Word end times are carried through generated processing; this is a timing-data/formatting fix, not newly deployed forced alignment. Kotoba's distributed character timing remains approximate.
+
+The reading panel automatically reserves three rows including furigana, grows for longer text, and retains scrolling beyond its screen-space cap. Timing/caption tests use controlled inputs; the cloud still cannot acquire YouTube audio to prove synchronization on a live video here.
+
+## Supplied captions and lookup help (0.5.16)
+
+The supplied screenshots show publisher-written video text 事象 / 類型 while lookup receives 自称 / 累計. Their pronunciations match, so dictionary lookup alone cannot establish which word was spoken. The う bird/rabbit results expose a separate problem: grammatical use was not routed separately from lexical nouns.
+
+Grammar-aware grouping and lookup fix the latter. For uninflected nouns, same-reading dictionary spellings may be ranked with the current sentence and nearby caption text, even when audio is unavailable. A strong suggestion appears as a context suggestion; a unique but weakly supported homophone is labeled only “Same reading.” Selecting it is explicit and does not rewrite the visible source subtitles.
+
+Measured text-only examples: the small Japanese LM scored the 事象 sentence at 2.6191 vs 自称 at 3.0251 loss/character. 類型 scored 2.9280 vs 累計 2.9873: this is too weak for the configured context threshold. These are screenshot-text diagnostics, not recognition error-rate measurements or proof about the audio. No per-word/video hardcoded correction table was added.
+
+## Count-based independent checks (0.5.17)
+
+A general sequence database now uses 235,085 deduplicated Tatoeba Japanese sentences, with 12,486 held out before training. Its 35,628-token vocabulary supports interpolated word pairs/triples. A candidate must preserve pronunciation, noun role, token boundaries and protected names. Strong count-only suggestions need evidence from at least three distinct sentences on both adjacent sides and clear margins against the source and other candidates. A sparse case can use the existing free local model as another check, with both rankings required to agree. This is neither a paid API nor a table of corrections for specific screenshots.
+
+`npm run context:evaluate` tests **500 synthetic homophone mistakes across 355 original words** in held-out text. After the final boundary/proper-word guards, the count-only stage suggests 146 alternatives, all matching the original text; it abstains on 354. On the corresponding 500 clean inputs it suggests one unwanted change. This evaluation fixes the sampling/threshold policy before measurement, but remains a small synthetic text test, not an independently reviewed speech benchmark. It does not evaluate the sparse-case local-model fallback. The unwanted clean-input suggestion is a reason to keep source-caption changes explicit.
+
+Generated-ASR context overrides additionally require sufficient sequence evidence and agreement with the existing local neural likelihood check; missing corpus data or disagreement prevents that override. Recognizer agreement is still not proof, and the first progressive track can still be wrong. No new source-audio access, forced alignment or on-device video OCR is added by this update.

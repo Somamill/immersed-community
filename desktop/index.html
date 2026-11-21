@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en" data-dot-theme="dark">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>immersed.</title>
+    <link rel="stylesheet" href="/study.css" /><link rel="stylesheet" href="/dot-tokens.css" /><link rel="stylesheet" href="/dot-brand.css" />
+  </head>
+  <body>
+    <header>
+      <div class="brand">
+<img src="/icon.png" alt="" /><strong>immersed.</strong><button type="button" id="understanding" class="understanding" aria-label="Estimated vocabulary coverage" title="Estimated known vocabulary in the current video, based on your level and word choices" hidden>—%</button>
+      </div>
+      <form id="search">
+        <input
+          id="query"
+          placeholder="Search YouTube or paste a video link"
+          aria-label="Search YouTube or paste a video link"
+        /><button class="primary">Search</button>
+      </form>
+      <nav aria-label="Navigation">
+<button id="netflixBack" aria-label="Back to immersed" title="Back to immersed" hidden>←</button>
+        <button id="discoverButton" aria-pressed="false">Discover</button>
+        <button id="watchButton" aria-pressed="true">Watch</button>
+<button id="netflixButton">Netflix</button>
+        <button
+          id="fullscreen"
+          aria-label="Video fullscreen"
+          title="Video fullscreen · F"
+        >
+          ⛶</button
+        ><button id="openFile">Open file</button
+        ><button id="libraryButton">Library</button
+        ><button id="wordsButton">Words</button
+        ><button id="settingsButton">Settings</button>
+      </nav>
+    </header>
+    <section id="discovery" class="discoveryPage" aria-label="Discover videos" hidden>
+      <div class="discoveryIntro"><div><span class="discoveryEyebrow">JAPANESE · WATCH &amp; LISTEN</span><h1>Discover</h1><p>Good conversations. More time in Japanese.</p></div><button id="refreshDiscovery" class="muted">Refresh</button></div>
+      <div id="discoveryTopics" class="discoveryTopics" role="group" aria-label="Video topics"></div>
+      <div id="discoveryBody"></div>
+    </section>
+    <main id="watchPage">
+      <section class="videoCard">
+        <div class="video" id="video">
+          <div class="placeholder">
+            <b>Your Japanese, in context.</b>Open a Japanese video or audiobook.
+            Import MP4, M4B, M4A, MP3 and other local media to study offline.
+          </div>
+        </div>
+        <div class="videoFooter">
+          <span class="badge" id="sourceBadge">LOCAL STUDY</span
+          ><span id="status" role="status">Ready when you are</span
+          ><button id="download" hidden aria-label="Save video for offline playback" title="Save this video to Library to watch without internet"><span aria-hidden="true">⇩</span> <span id="downloadLabel">Save offline</span></button>
+        </div>
+        <div id="speechProgress" class="speechProgress" hidden aria-live="polite"><div><span id="speechStage"></span><span id="speechPercent"></span></div><progress id="speechBar" max="100" aria-label="Subtitle preparation"></progress></div>
+      <div id="chapters" hidden>
+          <label
+            >Chapter
+            <select id="chapterSelect"></select
+          ></label>
+        </div>
+      </section>
+      <div id="studyDivider" role="separator" tabindex="0" aria-orientation="vertical" aria-label="Resize video and reading panes" aria-valuemin="30" aria-valuemax="70" aria-valuenow="60"></div>
+      <section class="studyCard">
+<div id="netflixOptions" hidden>
+<div class="netflixTools"><button id="leaveNetflix" aria-label="Back to immersed" title="Back to immersed">←</button><strong>Netflix</strong><button id="netflixBrowse" title="Browse Netflix">Browse</button></div>
+<p id="netflixStatus" role="status">Sign in to Netflix and choose a title. Select subtitles in Netflix’s Audio &amp; Subtitles menu.</p>
+<div id="netflixRecovery" hidden><button id="netflixRetry">Retry playback</button><button id="netflixSafari">Open in Safari</button></div>
+<button id="netflixSubtitles" title="Choose audio and subtitles in Netflix" aria-label="Netflix audio and subtitles">Audio &amp; subtitles ↗</button>
+<label><input id="netflixOriginal" type="checkbox" checked /> Also show subtitles on the video</label>
+</div>
+        <div class="studyHead">
+          <strong>Watch & read</strong>
+          <div>
+            <small id="count">Japanese subtitles</small><br /><small
+              id="coverage"
+            ></small>
+          </div>
+        </div>
+        <div class="subtitles" id="subtitles">
+          <div class="hint">Choose a video or audiobook to begin.</div>
+        </div>
+        <div class="lookup" id="lookup">
+          <div class="lookupTop">
+            <div>
+              <div class="lookupWord" id="lookupWord"></div>
+              <div class="reading" id="reading"></div>
+            </div>
+            <div class="lookupNavigation"><button id="previousWord" disabled></button><button id="nextWord" disabled></button><button id="closeLookup" aria-label="Close lookup">✕</button></div>
+          </div>
+          <div class="lookupBody">
+          <div id="grammar" class="hint"></div>
+          <div id="phraseMeaning" class="phraseMeaning" hidden></div>
+          <div id="contextMeaning" class="contextMeaning" hidden aria-live="polite"></div>
+          <div class="definitions" id="definitions"></div>
+          <div id="alternatives" class="hint"></div>
+          </div>
+          <div id="learningFeedback" class="learningFeedback" role="status" hidden></div>
+          <div id="wordStates" class="wordStates" role="group" aria-label="Word status"></div>
+          <div class="lookupActions"><button id="known">Mark known</button
+          ><button id="saveWord">Save word</button
+          ><button id="speak">Pronounce</button></div>
+        </div>
+        <div class="controls" id="controls">
+          <button class="control" id="previous" aria-label="Previous subtitle" title="Previous subtitle · ←">
+            ‹</button
+          ><button class="control play" id="play" aria-label="Play or pause">
+            <svg viewBox="0 0 24 24" width="25" height="25" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 5 11 7-11 7Z"/></svg></button
+          ><button class="control" id="next" aria-label="Next subtitle" title="Next subtitle · →">
+            ›</button
+          ><button class="control" id="replay" aria-label="Replay subtitle" title="Replay subtitle · R"></button>
+          <div class="speedControl">
+            <button id="speed" class="speedButton" aria-label="Playback speed" title="Playback speed" aria-haspopup="menu" aria-expanded="false">
+              <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M4 18a9 9 0 1 1 16 0M12 12l5-5"/><circle cx="12" cy="12" r="2"/></svg><span id="speedValue">1×</span>
+            </button>
+            <div id="speedMenu" class="speedMenu" role="menu" aria-label="Playback speed" hidden></div>
+          </div>
+        </div>
+      </section>
+    </main>
+    <dialog id="panel">
+      <div class="panelHead">
+        <h2 id="panelTitle"></h2>
+        <button id="closePanel" aria-label="Close panel">✕</button>
+      </div>
+      <div id="panelBody"></div>
+    </dialog>
+    <input
+      id="fileInput"
+      type="file"
+      accept=".mp4,.m4v,.mov,.m4b,.m4a,.mp3,.wav,.aac,.flac,.ogg,.webm"
+      hidden
+    />
+    <input
+      id="settingsInput"
+      type="file"
+      accept="application/json,.json"
+      hidden
+    />
+    <script src="/shared/preferences-core.js"></script>
+    <script src="/shared/learning-core.js"></script>
+    <script src="/compare.js"></script>
+    <script src="/discovery.js"></script>
+    <script src="/word-history.js"></script>
+    <script src="/reading-cues.js"></script>
+    <script src="/subtitle-playback.js"></script>
+    <script src="/netflix.js"></script>
+    <script src="/study.js"></script>
+  </body>
+</html>

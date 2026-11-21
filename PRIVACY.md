@@ -1,0 +1,29 @@
+# Immersed privacy policy
+
+Last updated: 2026-11-05. Immersed is an independent Japanese learning app developed by Somamill. This policy describes the current app and its optional language service. Contact [max@miller-max.com](mailto:max@miller-max.com) for privacy requests, or see [Immersed support](SUPPORT.md).
+
+## Information processed
+
+Saved words, sentences, viewing preferences, knowledge choices and a limited caption cache are stored on your device. They are not tied to an Immersed account. Removing the app removes its local data; iOS device backups may retain a copy under your Apple backup settings.
+
+The app sends a word, sentence or search query to the Immersed language service when you request analysis or dictionary results. To request generated subtitles, it sends the selected public YouTube video ID. The service may process video audio obtained from that source, the resulting transcript and word timing. It caches generated captions by video ID for reuse; the current server has no automatic expiry for this shared cache. The service does not ask for your name, email or Immersed login. It may receive ordinary connection information such as IP address through its host or proxy. Hosting and retention settings must be reviewed again before public deployment.
+
+In an iPhone build with local captions enabled, Immersed requests iOS screen/audio capture and speech-recognition permission when a selected video lacks Japanese captions. ReplayKit audio samples are passed directly to Apple's on-device Japanese speech recognizer. Immersed does not save the captured audio or video or send those samples to its server. Generated caption text may be cached on the iPhone as described above. Local capture may be unavailable for protected media or unsupported devices.
+
+## Third parties
+
+YouTube video playback and browsing occur inside a YouTube web view. Google/YouTube may receive your IP address, device/browser information, interactions and any cookies they set. Their [privacy policy](https://policies.google.com/privacy) applies to those services. Immersed does not transfer a Safari or Google sign-in session into its player. Expo services may be involved in app distribution and updates. This app does not include its own advertising or analytics SDK.
+
+## Control and requests
+
+You can remove saved words in the app and clear local app data by deleting the app. To report a privacy problem or request removal of a video transcript from a service operated by Immersed, email [max@miller-max.com](mailto:max@miller-max.com). Do not post private information in a public GitHub issue. Because server captions are keyed by public video ID rather than an Immersed user account, the service cannot identify a personal viewing history to export.
+
+This policy will be updated when the public hosting arrangement and its retention terms are finalized.
+
+## Apple Silicon Mac app
+
+The Mac app runs its language and speech service on `127.0.0.1`. Imported video/audio, including Japanese M4B audiobooks, is copied into the local library under `~/Library/Application Support/Immersed Mac`. Downloaded media, chapter metadata, transcripts and runtime files remain there until removed. Media and speech audio are not uploaded to a remote transcription service. YouTube browsing, search, metadata requests and downloads contact YouTube; initial dictionary, corpus and model installation contacts their download hosts.
+
+Mac settings, known/unknown choices, playback positions and saved words persist in the app's local WebKit storage. Website data also persists in its embedded WebKit store. The app does not import cookies from your personal browsers or provide embedded Google authentication. JSON backups can contain settings, saved words and their source context; they are written only where you choose in the Mac save dialog, which can include iCloud Drive. Automatic iPhone/Mac iCloud synchronization is not currently enabled.
+
+Removing a media item from the Mac library removes the app's copied file and associated transcripts, and leaves the original imported file unchanged. Deleting the Mac app or uninstalling its Homebrew formula does not automatically erase its Application Support library or WebKit data. Local startup logs may include setup errors and local file paths. These Mac storage rules differ from deleting an iOS application.

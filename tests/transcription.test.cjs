@@ -1,0 +1,74 @@
+const { test } = require('node:test');
+const assert = require('node:assert/strict');
+const { createTranscriptionService } = require('../server/transcription.cjs');
+const videoId = 'M7lc1UVf-VE';
+function fixture() {
+  let time = 100000;
+  const callbacks = [];
+  const storage = { existsSync: () => true, promises: { readFile: async () => { throw new Error('not cached'); }, mkdir: async () => {}, writeFile: async () => {} } };
+  const service = createTranscriptionService({ storage, now: () => time, execute: (...args) => callbacks.push(args.at(-1)) });
+  return { service, callbacks, storage, advance: ms => { time += ms; } };
+}
+test('a failed audio job can recover instead of being cached forever', async () => {
+  const { service, callbacks, advance } = fixture();
+  assert.equal((await service.status(videoId)).status, 'idle');
+  assert.equal(callbacks.length, 0);
+  await service.start(videoId);
+  await callbacks[0](null, JSON.stringify({ error: 'NETWORK_BLOCKED', message: 'Network unavailable' }));
+  assert.equal((await service.start(videoId)).reason, 'NETWORK_BLOCKED');
+  assert.equal(callbacks.length, 1, 'polling should not repeatedly start failed audio downloads');
+  advance(6000);
+  const retry = await service.start(videoId, true);
+  assert.equal(retry.status, 'processing');
+  assert.equal(callbacks.length, 2);
+  await callbacks[1](null, JSON.stringify({ cues: [{ start: 0, end: 2, text: 'こんにちは。' }] }));
+  assert.equal((await service.start(videoId)).status, 'ready');
+});
+test('cached transcripts survive disk failure and concurrent requests share one job', async () => {
+  const { service, callbacks, storage } = fixture();
+  const first = await service.start(videoId);
+  assert.deepEqual(await service.start(videoId), first);
+  assert.equal(callbacks.length, 1);
+  assert.equal((await service.start('dQw4w9WgXcQ')).status, 'busy');
+  storage.promises.writeFile = async () => { throw new Error('disk full'); };
+  await callbacks[0](null, JSON.stringify({ cues: [{ start: 0, end: 1, text: '日本語' }] }));
+  assert.equal((await service.start(videoId)).status, 'ready');
+});
+
+test('preview middleware preserves Connect fallback for unhandled Metro requests', async () => {
+  const wrap = require('../server/middleware.cjs');
+  const fallback = () => {};
+  const req = { url: '/not-a-metro-source', method: 'GET' };
+  const res = {};
+  let reached = false;
+  await wrap((incoming, response, next) => {
+    assert.equal(incoming, req);
+    assert.equal(response, res);
+    assert.equal(next, fallback);
+    reached = true;
+  })(req, res, fallback);
+  assert.equal(reached, true);
+});
+
+test('processing polls return partial captions and comparisons without leaking paths or starting another worker', async () => {
+  const { service, callbacks, storage } = fixture();
+  await service.start(videoId);
+  storage.promises.readFile = async file => {
+    assert.ok(file.endsWith('.progress.json'));
+    return JSON.stringify({ cues: [{ start: 0, end: 2, text: '日本語' }], comparisons: [{ selected: 'reazon' }], processedSeconds: 2 });
+  };
+  const partial = await service.status(videoId);
+  assert.equal(partial.status, 'processing');
+  assert.equal(partial.cues[0].text, '日本語');
+  assert.equal(partial.progressFile, undefined);
+  assert.equal(callbacks.length, 1);
+});
+
+test('invalid cached/progress/final cue timing is rejected instead of hiding source captions', async () => {
+  const { service, callbacks, storage } = fixture();
+  storage.promises.readFile = async () => JSON.stringify({ cues: [{ start: -1, end: 2, text: '不正' }] });
+  assert.equal((await service.start(videoId)).status, 'processing');
+  assert.equal((await service.start(videoId)).cues, undefined);
+  await callbacks[0](null, JSON.stringify({ cues: [{ start: 3, end: 4, text: '後' }, { start: 0, end: 1, text: '前' }] }));
+  assert.equal((await service.start(videoId)).status, 'unavailable');
+});

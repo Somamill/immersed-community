@@ -1,0 +1,87 @@
+const language = require('./language.cjs');
+const { matchScreenCaption } = require('./screen-captions.cjs');
+const { lookupContext } = require('./lookup-context.cjs');
+const { contextMeaning, validContext } = require('./context-meaning.cjs');
+const { key: dictionaryKey } = require('./grammar.cjs');
+const transcription = require('./transcription.cjs');
+const { reflowCaptions, validBatch } = require('./caption-reflow.cjs');
+// Shared language API for the development preview and standalone hosted server.
+// These server files never enter the client bundle.
+module.exports = function middleware(next) {
+  void language.initialize().catch(() => {});
+  return async (req, res, fallback) => {
+    const url = new URL(req.url, 'http://localhost');
+    if (!url.pathname.startsWith('/api/immersion/')) return next(req, res, fallback);
+    const json = (status, value) => { res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(value)); };
+    try {
+      if (url.pathname.endsWith('/reflow') && req.method === 'POST') {
+        const chunks = []; let size = 0;
+        for await (const chunk of req) { size += chunk.length; if (size <= 128000) chunks.push(chunk); }
+        if (size > 128000) return json(413, { error: 'Caption batch too large' });
+        let data;
+        try { data = JSON.parse(Buffer.concat(chunks).toString('utf8')); } catch { return json(400, { error: 'Invalid caption batch' }); }
+        if (!validBatch(data.cues)) return json(400, { error: 'Invalid caption batch' });
+        return json(200, { cues: await reflowCaptions(data.cues, data.reading === true ? {maxDuration:12,maxCharacters:80} : {}) });
+      }
+      if (url.pathname === '/api/immersion/transcribe' && ['GET', 'POST'].includes(req.method)) {
+        const id = url.searchParams.get('videoId') || '';
+        if (!/^[\w-]{11}$/.test(id)) return json(400, { error: 'Invalid video ID' });
+        if (req.method === 'GET') return json(200, await transcription.status(id));
+        if (req.headers['x-immersed-request'] !== '1') return json(403, { error: 'Missing request header' });
+        return json(200, await transcription.start(id, url.searchParams.get('retry') === 'true'));
+      }
+      if (req.method !== 'GET') return json(405, { error: 'Method not allowed' });
+      if (url.pathname.endsWith('/analyze')) {
+        const text = url.searchParams.get('text') || '';
+        if (!text || text.length > 2000) return json(400, { error: 'Caption must be between 1 and 2000 characters' });
+        const tokens = await language.analyze(text, true);
+        const dictionary = {},lookups={};
+        const prefetch=url.searchParams.get('dictionary')==='prefetch';
+        if (prefetch||url.searchParams.get('dictionary') === 'true') {
+          for (const token of tokens.filter(t => t.word).slice(0, 24)) {
+            const key = dictionaryKey(token);
+            if(prefetch){const exact=[token.lemma,token.reading,token.pos,token.proper].join(':');if(!Object.hasOwn(lookups,exact))lookups[exact]=await language.lookup(token.lemma,token);}
+            else if (!dictionary[key]) dictionary[key] = await language.lookup(token.lemma, token);
+          }
+        }
+        return json(200, { tokens, dictionary, ...(prefetch?{lookups}:{}) });
+      }
+      if (url.pathname.endsWith('/dictionary')) {
+        const word = url.searchParams.get('word') || '';
+        if (!word || word.length > 120) return json(400, { error: 'Invalid word' });
+        const data = await language.lookup(word, { proper: url.searchParams.get('proper') === 'true', pos: (url.searchParams.get('pos') || '').slice(0, 30), reading: (url.searchParams.get('reading') || '').slice(0, 120) });
+        return json(200, data[0]?.source === 'Grammar' ? { data, source: 'Immersed grammar notes' } : { data, source: 'JMdict + JMnedict / EDRDG; Kanjium pitch accents / Uros O.', license: 'CC BY-SA 4.0' });
+      }
+      if (url.pathname.endsWith('/screen-caption')) {
+        let lines; try { lines = JSON.parse(url.searchParams.get('lines') || '[]'); } catch { return json(400, { error: 'Invalid video caption' }); }
+        return json(200, { match: await matchScreenCaption(url.searchParams.get('sentence') || '', lines) });
+      }
+      if (url.pathname.endsWith('/phrase-context')) {
+        const get = key => url.searchParams.get(key) || '';
+        const data = { word: get('word'), sentence: get('sentence'), start: Number(get('start')), end: Number(get('end')), before: '', after: '' };
+        if (!validContext(data)) return json(400, { error: 'Invalid caption context' });
+        return json(200, { phrases: await language.contextPhrases(data.sentence, data.start, data.end) });
+      }
+      if (url.pathname.endsWith('/context-meaning')) {
+        const get = key => url.searchParams.get(key) || '';
+        const data = { word: get('word'), lemma: get('lemma').slice(0,120), reading: get('reading').slice(0,120), pos: get('pos').slice(0,30),
+          sentence: get('sentence'), start: Number(get('start')), end: Number(get('end')), before: get('before'), after: get('after') };
+        if (!validContext(data)) return json(400, { error: 'Invalid caption context' });
+        return json(200, await contextMeaning(data));
+      }
+      if (url.pathname.endsWith('/lookup-context')) {
+        const get = key => url.searchParams.get(key) || '';
+        if (!get('word') || get('word').length > 120 || !get('sentence') || get('sentence').length > 1000 || get('before').length > 120 || get('after').length > 120) return json(400, { error: 'Invalid caption context' });
+        const data = { word: get('word'), reading: get('reading').slice(0,120), pos: get('pos'),
+          sentence: get('sentence'), start: Number(get('start')), end: Number(get('end')), before: get('before'), after: get('after') };
+        return json(200, { alternatives: await lookupContext(data) });
+      }
+      if (url.pathname.endsWith('/search')) {
+        const query = (url.searchParams.get('query') || '').trim();
+        if (!query || query.length > 120) return json(400, { error: 'Enter up to 120 characters' });
+        return json(200, { data: await language.search(query) });
+      }
+      return json(404, { error: 'Unknown endpoint' });
+    } catch { return json(503, { error: 'Language service unavailable. Install the dictionary with npm run language:setup.' }); }
+  };
+};

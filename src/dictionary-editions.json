@@ -1,0 +1,22 @@
+{
+  "name": "Kotoba Atlas",
+  "storeDefault": "en",
+  "editions": {
+    "en": {
+      "name": "Kotoba Atlas",
+      "version": "1.0.0",
+      "language": "en",
+      "archive": "Kotoba-Atlas-English-v1.0.0.zip",
+      "url": "https://github.com/Somamill/kotoba-atlas/releases/download/atlas-v1.0.0/Kotoba-Atlas-English-v1.0.0.zip",
+      "sha256": "eb82b9f74510bad7849c0b9688ade31082a5702016d6e03bfc539b6f3099475f"
+    },
+    "de": {
+      "name": "Kotoba Atlas",
+      "version": "1.0.0",
+      "language": "de",
+      "archive": "Kotoba-Atlas-German-v1.0.0.zip",
+      "url": "https://github.com/Somamill/kotoba-atlas/releases/download/atlas-v1.0.0/Kotoba-Atlas-German-v1.0.0.zip",
+      "sha256": "334fa5b9dc2a24be97ab9a72a9d3de8ed856a96e8bf6d20050b9a2c74356afca"
+    }
+  }
+}
