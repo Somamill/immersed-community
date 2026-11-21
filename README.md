@@ -81,7 +81,7 @@ The first launch prepares the local dictionary and speech tools. See the [Mac gu
 
 ## iPhone and iPad
 
-The separate App Store edition is for videos and Japanese subtitle files you bring. Import MP4 or MOV with SRT or WebVTT, tap words for offline lookup, and save vocabulary with the original line. The streaming integrations and caption generation described above are features of the community Mac app.
+The separate App Store edition, **narai.**, is for videos and Japanese subtitle files you bring. Import MP4 or MOV with SRT or WebVTT, tap words for offline lookup, and save vocabulary with the original line. The streaming integrations and caption generation described above are features of the community Mac app.
 
 [Download on the App Store](https://apps.apple.com/us/app/immersed-learn-japanese/id6834110293)
 

@@ -1,4 +1,4 @@
-# Immersed Store edition privacy policy
+# narai. privacy policy
 
 Effective 13 November 2026. Publisher: Max Miller. Support: max@miller-max.com.
 
@@ -10,4 +10,4 @@ If you choose Send to Anki, the app passes the selected expression, definition, 
 
 Support, source and license links open your email app or browser. Those providers receive their usual network information. If you email support, the publisher receives the message and uses it to respond. Do not include private media, passwords or unnecessary personal information. Ask max@miller-max.com to delete support messages when resolved.
 
-The separately distributed full community editions have additional streaming, local-server and capture features. This policy applies to the App Store editions. See the [community privacy policy](PRIVACY.md) for the direct-download Mac edition.
+The separately distributed full community editions have additional streaming, local-server and capture features. This policy applies to narai. (formerly Immersed. on the App Store). See the [community privacy policy](PRIVACY.md) for the direct-download Mac edition.
