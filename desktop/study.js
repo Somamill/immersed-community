@@ -1823,13 +1823,24 @@ function setting(body, label, description, key, options, isExtra = false) {
   row.append(text, control);
   body.append(row);
 }
+function atlasHeading(title) {
+  const heading = el("h3", null, "atlasHeading");
+  const icon = el("img");
+  icon.src = "/credits/kotoba-atlas.png";
+  icon.alt = "";
+  icon.width = 22;
+  icon.height = 22;
+  heading.append(icon, document.createTextNode(title));
+  return heading;
+}
+
 function showSettings(focusCredits = false) {
   const body = showPanel("Settings");
   const suite = document.createElement("section");
   suite.innerHTML = '<h3>Immersed</h3><details class="dot-suite"><summary>Part of <b>dot.</b></summary><nav aria-label="More from dot."><a href="https://github.com/Somamill/read">read.<small>Books, articles, and highlights.</small></a><a href="https://github.com/Somamill/listen">listen.<small>Find your next audiobook.</small></a></nav></details>';
   body.append(suite);
   body.append(button("Version history", showHistory));
-  const dictionaryStatus = el("p","Kotoba Atlas","hint"), dictionaryUpdate = button("Check dictionary updates",async()=>{
+  const dictionaryStatus = el("p",null,"hint"), dictionaryUpdate = button("Check dictionary updates",async()=>{
     dictionaryUpdate.disabled=true;
     try {
       let data=await api("desktop/dictionary-update",{check:"1"});
@@ -1855,7 +1866,7 @@ function showSettings(focusCredits = false) {
   });
   dictionaryUpdate.classList.add("dictionaryUpdate");
   dictionaryStatus.setAttribute("role","status");
-  body.append(dictionaryStatus,dictionaryUpdate);
+  body.append(atlasHeading("Kotoba Atlas"),dictionaryStatus,dictionaryUpdate);
   const languageRow=el("label",null,"settingRow"), languageSelect=el("select");
   languageRow.append(el("span","Kotoba Atlas language"),languageSelect);
   for(const [value,label] of [["en","English"],["de","Deutsch"]]){const option=el("option",label);option.value=value;languageSelect.append(option);}
@@ -1978,7 +1989,7 @@ function showSettings(focusCredits = false) {
       "Space: play/pause · ←/→ or J/L: previous/next subtitle · F: video fullscreen · K: play/pause · Esc: close lookup · ⌘L: search · ⌘O: open media",
       "hint",
     ),
-    el("h3", "Dictionary sources"),
+    atlasHeading("Dictionary sources"),
     el(
       "p",
       "Kotoba Atlas · English or German definitions, selected in Settings. German uses English fallback where needed. Full sources and licenses: https://github.com/Somamill/kotoba-atlas/blob/main/DATA-LICENSES.md. JMdict and JMnedict © EDRDG; Kanjium pitch accents © Uros O., CC BY-SA 4.0. Kuromoji/IPADIC supplies Japanese morphology. Tatoeba contributors supply context counts, CC BY 2.0 FR. On Apple Silicon, Qwen3-4B-Instruct-2507 (MLX, Apache 2.0) ranks dictionary meanings locally; it can select an incorrect sense. Context plausibility is not audio verification. JLPT levels are community estimates. Speech transcripts are generated estimates; verify uncertain words with the audio.",
