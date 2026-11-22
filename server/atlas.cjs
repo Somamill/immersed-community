@@ -12,7 +12,7 @@ function initialize() {
     spec = native.spec;
     return;
   }
-  const candidate = new DatabaseSync(path.join(__dirname, '../.data/kotoba-atlas.db'), { readOnly: true });
+  const candidate = new DatabaseSync(path.join(require('./data-path.cjs'), 'kotoba-atlas.db'), { readOnly: true });
   const installed = Object.fromEntries(candidate.prepare("SELECT key,value FROM metadata WHERE key IN ('name','version','language','sha256','archive','url')").all().map(row => [row.key,row.value]));
   const baseline = editions[installed.language];
   if (!baseline || !/^\d+\.\d+\.\d+$/.test(installed.version || '') || installed.version.localeCompare(baseline.version, 'en', {numeric:true}) < 0 || !/^[a-f0-9]{64}$/.test(installed.sha256 || '') ||

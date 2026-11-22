@@ -12,7 +12,7 @@ SYSTEM = '''Select the supplied dictionary meaning that best fits the SELECTED J
 def main():
     from mlx_lm import load, generate
     from mlx_lm.sample_utils import make_sampler
-    model_dir = Path(__file__).resolve().parent.parent / ".data" / "context-model"
+    model_dir = Path(os.environ.get("IMMERSED_APP_HOME", Path(__file__).resolve().parent.parent)) / ".data" / "context-model"
     if "--prepare" in sys.argv:
         from huggingface_hub import snapshot_download
         snapshot_download(MODEL, revision=REVISION, local_dir=model_dir,

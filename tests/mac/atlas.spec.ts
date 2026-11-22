@@ -5,7 +5,8 @@ test('Atlas German definitions appear in the Mac popup, saved snapshot and searc
   await page.evaluate(() => (window as unknown as { eval(s: string): Promise<void> }).eval(`openLookup({text:'日本語',lemma:'日本語',reading:'にほんご',grammar:[],pos:'noun'},true)`));
   await expect(page.locator('#definitions')).toContainText(/Japanisch|japanisch/);
   await expect(page.locator('#definitions .dictionarySense p').first()).toBeInViewport();
-  await expect(page.locator('#definitions')).toContainText('Kotoba Atlas · 1.0.0 · Deutsch');
+  const installed = await (await page.request.get('/api/desktop/dictionary-update')).json();
+  await expect(page.locator('#definitions')).toContainText('Kotoba Atlas · ' + installed.current + ' · Deutsch');
   const meaning = await page.evaluate(() => (window as unknown as { eval(s: string): string }).eval('lookupWordRecord().meaning'));
   expect(meaning).toMatch(/Japanisch|japanisch/);
   await page.screenshot({ path: 'work/atlas-mac-lookup.png' });

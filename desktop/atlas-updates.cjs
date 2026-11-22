@@ -63,7 +63,7 @@ function createAtlasUpdater({root, run, getSpec = () => require('../server/atlas
     if (task) return info();
     latest = spec;
     if (!info().available) return info();
-    const folder = path.join(root,'.data');
+    const folder = process.env.IMMERSED_APP_HOME ? require('../server/data-path.cjs') : path.join(root,'.data');
     fs.mkdirSync(folder,{recursive:true});
     const staging = fs.mkdtempSync(path.join(folder,'atlas-update-'));
     const manifest = path.join(staging,'spec.json'), backup = path.join(staging,'previous.db'), active = path.join(folder,'kotoba-atlas.db');
@@ -71,7 +71,7 @@ function createAtlasUpdater({root, run, getSpec = () => require('../server/atlas
     fs.writeFileSync(manifest,JSON.stringify(spec));
     status = 'updating'; error = '';
     let restoreFailed = false;
-    task = Promise.resolve().then(() => run('/usr/bin/nice', ['-n','10',process.env.IMMERSED_PYTHON || 'python3',path.join(root,'scripts/build-atlas.py')],
+    task = Promise.resolve().then(() => run('/usr/bin/nice', ['-n','10','python3',path.join(root,'scripts/build-atlas.py')],
       {env:{...process.env,KOTOBA_ATLAS_SPEC:manifest},timeout:10*60*1000,maxBuffer:1024*1024}))
       .then(() => { reload(); if (getSpec().sha256 !== spec.sha256) throw Error('The dictionary update could not be verified.'); status='complete'; })
       .catch(() => {

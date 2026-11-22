@@ -11,8 +11,8 @@
     "context:evaluate": "node scripts/evaluate-context.cjs",
     "mac:serve": "node desktop/server.cjs",
     "alignment:setup": "node scripts/setup-alignment.cjs",
-    "test:mac:node": "node --test tests/mac-desktop.test.cjs tests/atlas-updates.test.cjs tests/anki.test.cjs tests/native-atlas.test.cjs tests/caption-reading.test.cjs tests/video-captions.test.cjs tests/focused-speech.test.cjs tests/video-priority.test.cjs tests/search.test.cjs tests/youtube-metadata.test.cjs tests/word-history.test.cjs tests/subtitle-playback.test.cjs tests/reading-cues.test.cjs tests/transcript-windows.test.cjs tests/transcript-compare.test.cjs tests/mac-media.test.cjs tests/mac-server.test.cjs tests/highlighting.test.cjs tests/caption-frames.test.cjs",
-    "test:mac": "npm run test:mac:node && python3 -m unittest tests/test_mac_quality.py tests/test_mac_transcribe.py tests/test_mac_web_session.py tests/test_mac_focus.py && playwright test --config playwright.mac.config.ts"
+    "test:mac:node": "node --test tests/mac-desktop.test.cjs tests/atlas-updates.test.cjs tests/anki.test.cjs tests/native-atlas.test.cjs tests/caption-reading.test.cjs tests/video-captions.test.cjs tests/focused-speech.test.cjs tests/video-priority.test.cjs tests/search.test.cjs tests/youtube-metadata.test.cjs tests/word-history.test.cjs tests/subtitle-playback.test.cjs tests/reading-cues.test.cjs tests/transcript-windows.test.cjs tests/transcript-compare.test.cjs tests/mac-media.test.cjs tests/mac-server.test.cjs tests/highlighting.test.cjs tests/caption-frames.test.cjs tests/mac-reliability.test.cjs",
+    "test:mac": "npm run test:mac:node && python3 -m unittest tests/test_mac_quality.py tests/test_mac_transcribe.py tests/test_mac_web_session.py tests/test_mac_focus.py tests/test_mac_install.py && playwright test --config playwright.mac.config.ts"
   },
   "private": true,
   "engines": {

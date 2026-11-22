@@ -67,7 +67,7 @@ test('marked-word milestones count real choices and unknown highlights are disti
  await page.evaluate(()=>(window as any).eval(`openLookup({text:'猫',lemma:'猫',reading:'ねこ'},true)`));
  await page.locator('#wordStates').getByRole('button',{name:'Mark unknown',exact:true}).click();
  const word=page.getByRole('button',{name:'Look up 猫',exact:true});await expect(word).toHaveClass(/unknown/);
- expect(await word.evaluate(e=>getComputedStyle(e).borderBottomWidth)).toBe('2px');
+ await expect(word).toHaveCSS('border-bottom-width','2px');
  await page.locator('#wordStates').getByRole('button',{name:'Mark known',exact:true}).click();await expect(page.locator('#learningFeedback')).toHaveText('10 words marked known');
  await page.locator('#wordStates').getByRole('button',{name:'Mark known',exact:true}).click();expect(await page.evaluate(()=>(window as any).eval('Object.values(prefs.knowledge).filter(x=>x===true).length'))).toBe(10);
  await page.locator('#closeLookup').click();await page.getByRole('button',{name:'Words',exact:true}).click();await expect(page.locator('#panelBody')).toContainText('10 / 20 words marked known');

@@ -223,13 +223,13 @@ function status(text, error = false) {
   $("status").textContent = text;
   $("status").className = error ? "error" : "";
 }
-async function api(route, params = {}, method = "GET", body) {
+async function api(route, params = {}, method = "GET", body, signal) {
   const response = await fetch(
     "/api/" + route + "?" + new URLSearchParams(params),
     {
       method,
       headers: method === "GET" ? {} : { "X-Immersed-Request": "1" },
-      body,
+      body, signal,
     },
   );
   const data = await response.json();
@@ -347,7 +347,7 @@ function stopMedia() {
   subtitleBoundary.reset(); subtitlePauseCue = null;
   speechProgress();
   void flushPlayback();
-  clearTimeout(pollTimer);
+  stopTranscriptRequest();
   clearTimeout(hoverTimer);
   clearTimeout(leaveTimer);
   requestGeneration++;
@@ -700,7 +700,7 @@ function playbackChanged(force = false) {
     void flushPlayback();
   }
   if (
-    source?.type === "local" &&
+    studyVisible() && source?.type === "local" &&
     transcriptKind !== "human" &&
     source.duration > 600 &&
     localMedia?.readyState >= 1
@@ -709,7 +709,6 @@ function playbackChanged(force = false) {
     if (minute !== localWindow) {
       localWindow = minute;
       requestGeneration++;
-      clearTimeout(pollTimer);
       void beginTranscript();
     } else if (
       playing() &&
@@ -720,14 +719,17 @@ function playbackChanged(force = false) {
       prefetchedWindow = minute + 1;
       void api(
         "desktop/local-transcript",
-        { id: source.id, quality: extras.speechQuality, at: (minute + 1) * 60 },
+        { id: source.id, quality: extras.speechQuality, at: (minute + 1) * 60, prefetch: "true" },
         "POST",
       ).catch(() => {});
     }
   }
 }
-document.addEventListener("visibilitychange", () => void flushPlayback());
-window.addEventListener("pagehide", () => void flushPlayback());
+document.addEventListener("visibilitychange", studyVisibilityChanged);
+window.addEventListener("pagehide", () => {
+  stopTranscriptRequest();
+  void flushPlayback();
+});
 async function openLocal(id, time = null) {
   showWatch();
   const item = (await refreshLibrary()).find((x) => x.id === id);
@@ -818,55 +820,79 @@ async function openLocal(id, time = null) {
 window.openLocalMedia = (id, time = null) =>
   openLocal(id, time).catch((e) => status(e.message, true));
 window.loadVideo = loadVideo;
-const subtitleRetries = new Map();
-function recoverSubtitles(generation) {
-  if (!source || source.type === "netflix" || generation !== requestGeneration) return;
-  const key = [
-    source.type,
-    source.id,
-    extras.speechQuality,
-    source.type === "local" ? Math.floor(currentTime() / 60) : "track",
-  ].join(":");
-  const attempt = subtitleRetries.get(key) || 0;
-  if (attempt >= 2) return;
-  subtitleRetries.set(key, attempt + 1);
+let nativeStudyVisible = true, transcriptRequest, transcriptWatch;
+const studyVisible = () => nativeStudyVisible && document.visibilityState !== "hidden";
+function stopTranscriptRequest() {
   clearTimeout(pollTimer);
-  pollTimer = setTimeout(() => {
-    if (generation === requestGeneration) void beginTranscript(true);
-  }, [2000, 5000][attempt]);
+  transcriptWatch?.poll?.abort();
+  transcriptRequest?.abort();
+  transcriptRequest = null;
+  transcriptWatch = null;
+  $("retrySubtitles").hidden = true;
 }
+function studyVisibilityChanged() {
+  void flushPlayback();
+  clearTimeout(pollTimer);
+  if (!studyVisible()) {
+    clearTimeout(appUpdateTimer);
+    appUpdateRequest?.abort();
+    appUpdateRequest = null;
+    // Let an explicitly started job checkpoint in the service. Only stop observation.
+    transcriptWatch?.poll?.abort();
+  } else {
+    if (transcriptWatch && !transcriptWatch.starting && !transcriptWatch.finished) void pollTranscript(transcriptWatch);
+    void checkAutomaticUpdate();
+  }
+}
+window.immersedWindowVisibility = visible => {
+  nativeStudyVisible = visible;
+  studyVisibilityChanged();
+};
+$("retrySubtitles").onclick = () => void beginTranscript(true);
 async function beginTranscript(retry = false) {
   if (!source || !["youtube", "local"].includes(source.type)) return;
-  const generation = requestGeneration;
-  const params =
-    source.type === "local"
-      ? { id: source.id, quality: extras.speechQuality, at: currentTime() }
-      : { videoId: source.id, quality: extras.speechQuality, at: currentTime() };
-  if (retry) params.retry = "true";
-  const route =
-    source.type === "local" ? "desktop/local-transcript" : "desktop/transcribe";
-
+  stopTranscriptRequest();
+  const controller = new AbortController();
+  transcriptRequest = controller;
+  const local = source.type === "local";
+  const params = {
+    [local ? "id" : "videoId"]: source.id,
+    quality: extras.speechQuality,
+    at: currentTime(),
+  };
+  const route = local ? "desktop/local-transcript" : "desktop/transcribe";
+  const watch = { route, params, controller, generation: requestGeneration, starting: true, delay: 350 };
+  transcriptWatch = watch;
   status("Preparing Japanese subtitles…");
   speechProgress({ status: "processing" });
   try {
-    await api(route, params, "POST");
-    if (generation !== requestGeneration) return;
-    pollTranscript(route, params, generation);
-  } catch (e) {
-    if (generation === requestGeneration) {
-      status(e.message, true);
-      recoverSubtitles(generation);
+    await api(route, retry ? { ...params, retry: "true" } : params, "POST", undefined, controller.signal);
+    watch.starting = false;
+    void pollTranscript(watch);
+  } catch (error) {
+    if (!controller.signal.aborted && transcriptWatch === watch) {
+      status(error.message, true);
+      $("retrySubtitles").hidden = false;
+      watch.finished = true;
     }
   }
 }
-async function pollTranscript(route, params, generation) {
-  if (generation !== requestGeneration) return;
+async function pollTranscript(watch) {
+  const { route, params, controller, generation } = watch;
+  if (!studyVisible() || transcriptWatch !== watch || controller.signal.aborted || generation !== requestGeneration) return;
+  watch.poll?.abort();
+  const poll = new AbortController();
+  watch.poll = poll;
+  const stale = () => transcriptWatch !== watch || generation !== requestGeneration || poll.signal.aborted;
   try {
     const at = currentTime();
     const moved = source?.type === "youtube" && Math.abs(at - params.at) >= 5;
     if (moved) params.at = at;
-    const data = await api(route, params, moved ? "PUT" : "GET");
-    if (generation !== requestGeneration) return;
+    const data = await api(route, params, moved ? "PUT" : "GET", undefined, poll.signal);
+    if (stale()) return;
+    const progress = [data.status, data.phase, data.processedSeconds, data.cues?.length].join(":");
+    watch.delay = progress === watch.progress && !moved ? Math.min(5000, watch.delay * 2) : 350;
+    watch.progress = progress;
     if (Array.isArray(data.cues) && (data.cues.length || data.windowed)) {
       const previous = JSON.stringify(cues[cueIndex]);
       transcriptKind = data.source || "generated";
@@ -892,20 +918,17 @@ async function pollTranscript(route, params, generation) {
     }
     speechProgress(data);
     if (data.status === "ready") {
+      watch.finished = true;
       status("");
 
       void sampleCoverage();
       return;
     }
-    if (data.status === "paused") {
-      await api(route, params, "POST");
-      if (generation === requestGeneration) pollTimer = setTimeout(() => pollTranscript(route, params, generation), 350);
-      return;
-    }
-    if (data.status === "unavailable") {
-      status(data.message || "Speech recognition failed.", true);
-      if (data.canRetry !== false) recoverSubtitles(generation);
-
+    if (["paused", "unavailable"].includes(data.status)) {
+      watch.finished = true;
+      status(data.message || (data.status === "paused" ? "Subtitle preparation paused." : "Speech recognition failed."), data.status === "unavailable");
+      $("retrySubtitles").textContent = data.status === "paused" ? "Resume subtitles" : "Retry subtitles";
+      $("retrySubtitles").hidden = data.canRetry === false;
       return;
     }
     status(
@@ -916,16 +939,13 @@ async function pollTranscript(route, params, generation) {
             "%"
           : ""),
     );
-    pollTimer = setTimeout(
-      () => pollTranscript(route, params, generation),
-      cues.some((c) => c.start <= currentTime() && currentTime() < c.end)
-        ? 1500
-        : 350,
-    );
-  } catch (e) {
-    if (generation === requestGeneration) {
-      status(e.message, true);
-      recoverSubtitles(generation);
+    if (studyVisible())
+      pollTimer = setTimeout(() => pollTranscript(watch), watch.delay);
+  } catch (error) {
+    if (!stale()) {
+      status(error.message, true);
+      $("retrySubtitles").hidden = false;
+      watch.finished = true;
     }
   }
 }
@@ -1834,7 +1854,103 @@ function atlasHeading(title) {
   return heading;
 }
 
-function showSettings(focusCredits = false) {
+let appUpdateTimer, appUpdateRequest;
+function scheduleUpdateCheck(state) {
+  clearTimeout(appUpdateTimer);
+  if (!state?.auto || !studyVisible()) return;
+  appUpdateTimer = setTimeout(checkAutomaticUpdate, Math.max(1000, state.nextAt - Date.now()));
+}
+async function checkAutomaticUpdate() {
+  clearTimeout(appUpdateTimer);
+  if (!studyVisible() || appUpdateRequest) return;
+  const controller = new AbortController();
+  appUpdateRequest = controller;
+  try {
+    const state = await api("desktop/app-update", {}, "GET", undefined, controller.signal);
+    if (!state.auto) return;
+    if (state.nextAt <= Date.now())
+      scheduleUpdateCheck(await api("desktop/app-update", { action: "foreground" }, "POST", undefined, controller.signal));
+    else scheduleUpdateCheck(state);
+  } catch { /* The next foreground event can retry a disconnected local service. */ }
+  finally { if (appUpdateRequest === controller) appUpdateRequest = null; }
+}
+function renderUpdateSettings(body, checkNow) {
+  const message = el("p", "Reading installed version…", "hint");
+  const button = el("button", "Check for Updates");
+  const auto = el("input");
+  auto.type = "checkbox";
+  const label = el("label", "Automatically check for app updates");
+  label.prepend(auto);
+  const download = el("a", "View Mac release");
+  label.hidden = button.hidden = download.hidden = true;
+  body.append(el("h3", "App updates"), message, button, label, download);
+  function present(state) {
+    message.textContent = "Installed version: " + state.version;
+    if (!state.supported) message.textContent += ". Development build.";
+    if (state.channel === "brew")
+      message.textContent += ". Use brew upgrade Somamill/immersed-community/immersed-mac, or add --fetch-HEAD for a HEAD installation.";
+    if (state.available) message.textContent += " Version " + state.latest + " is available.";
+    else if (state.status === "checked") message.textContent += " You have the latest stable version.";
+    if (state.error) message.textContent += " " + state.error;
+    button.hidden = label.hidden = !state.supported;
+    auto.checked = state.auto;
+    download.hidden = !state.available || state.channel !== "direct";
+    if (!download.hidden) download.href = state.url;
+    scheduleUpdateCheck(state);
+  }
+  const check = async () => {
+    button.disabled = true;
+    message.textContent = "Checking for app updates…";
+    try { present(await api("desktop/app-update", { action: "check" }, "POST")); }
+    catch (error) { message.textContent = error.message; }
+    finally { button.disabled = false; }
+  };
+  button.onclick = check;
+  auto.onchange = async () => {
+    try { present(await api("desktop/app-update", { action: "auto", enabled: auto.checked }, "POST")); if (auto.checked) void checkAutomaticUpdate(); }
+    catch (error) { message.textContent = error.message; }
+  };
+  void api("desktop/app-update").then(state => {
+    present(state);
+    if (checkNow && state.supported) void check();
+  }).catch(error => { message.textContent = error.message; });
+}
+function renderSetupSettings(body) {
+  const status = el("p", "", "hint");
+  const dictionary = el("button", "Prepare dictionary");
+  const context = el("button", "Prepare context model");
+  const speech = el("button", "Retry speech setup");
+  speech.hidden = true;
+  const names = { dependencies: "Language components", dictionary: "Dictionary", statistics: "Phrase data", context: "Context model", speech: "Speech runtime" };
+  const labels = { unchecked: "Checked on first use", needed: "Not prepared", queued: "Queued", preparing: "Preparing", failed: "Setup failed, retry available", ready: "Ready" };
+  let timer, dictionaryWasPending = false;
+  async function refresh(feature) {
+    clearTimeout(timer);
+    try {
+      const states = await api("desktop/setup", feature ? { feature } : {}, feature ? "POST" : "GET");
+      if (!states.dictionary) return;
+      status.textContent = Object.entries(names).map(([key, name]) => name + ": " + labels[states[key].status]).join(" · ");
+      if (states.speech.status === "ready") status.textContent += ". Speech models are prepared on demand.";
+      dictionary.hidden = states.dictionary.status === "ready";
+      context.hidden = states.context.status === "ready";
+      speech.hidden = states.speech.status !== "failed";
+      dictionary.disabled = [states.dependencies, states.dictionary].some(state => ["queued", "preparing"].includes(state.status));
+      context.disabled = ["queued", "preparing"].includes(states.context.status);
+      if (states.dictionary.status === "ready") {
+        if (dictionaryWasPending) { analysisCache.clear(); dictionaryCache.clear(); cueIndex = -1; void renderCue(); }
+      }
+      dictionaryWasPending = states.dictionary.status !== "ready";
+      if (body.isConnected && $("panel").open && studyVisible() && (feature || Object.values(states).some(state => ["queued", "preparing"].includes(state.status))))
+        timer = setTimeout(() => void refresh(), 2000);
+    } catch (error) { status.textContent = error.message; }
+  }
+  dictionary.onclick = () => void refresh("dictionary");
+  context.onclick = () => void refresh("context");
+  speech.onclick = () => void refresh("speech");
+  body.append(el("h3", "Local setup"), status, dictionary, context, speech);
+  void refresh();
+}
+function showSettings(focusCredits = false, checkAppUpdate = false) {
   const body = showPanel("Settings");
   const suite = document.createElement("section");
   suite.innerHTML = '<h3>Immersed</h3><details class="dot-suite"><summary>Part of <b>dot.</b></summary><nav aria-label="More from dot."><a href="https://github.com/Somamill/read">read.<small>Books, articles, and highlights.</small></a><a href="https://github.com/Somamill/listen">listen.<small>Find your next audiobook.</small></a></nav></details>';
@@ -1867,6 +1983,8 @@ function showSettings(focusCredits = false) {
   dictionaryUpdate.classList.add("dictionaryUpdate");
   dictionaryStatus.setAttribute("role","status");
   body.append(atlasHeading("Kotoba Atlas"),dictionaryStatus,dictionaryUpdate);
+  renderSetupSettings(body);
+  renderUpdateSettings(body, checkAppUpdate);
   const languageRow=el("label",null,"settingRow"), languageSelect=el("select");
   languageRow.append(el("span","Kotoba Atlas language"),languageSelect);
   for(const [value,label] of [["en","English"],["de","Deutsch"]]){const option=el("option",label);option.value=value;languageSelect.append(option);}
@@ -2682,7 +2800,7 @@ const subtitleBoundary = ImmersedSubtitlePlayback.createBoundary();
 let subtitlePauseCue = null, boundarySource = null;
 let last = 0, lastPlayingState = null;
 function tick(t) {
-  if (t - last > 100 && document.visibilityState !== "hidden" && $("discovery").hidden) {
+  if (t - last > 100 && studyVisible() && $("discovery").hidden) {
     last = t;
     const sourceKey = source ? source.type + ":" + source.id : null;
     if (sourceKey !== boundarySource) { boundarySource = sourceKey; subtitleBoundary.reset(); subtitlePauseCue = null; }
@@ -2758,3 +2876,6 @@ divider.onkeydown = event => {
   if(!["ArrowLeft","ArrowRight","Home","End"].includes(event.key))return;
   event.preventDefault();event.stopPropagation();applyPaneShare(event.key==="Home"?.3:event.key==="End"?.7:extras.paneShare+(event.key==="ArrowLeft"?-.02:.02));persist();
 };
+
+window.immersedCheckForUpdates = () => showSettings(false, true);
+void checkAutomaticUpdate();

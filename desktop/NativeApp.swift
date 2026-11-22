@@ -157,11 +157,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKUIDelegate, WKNaviga
     var window: NSWindow!
     var web: WKWebView!
     var service: Process?
+    var serviceLifetime: FileHandle?
     var loading: NSView!
     var previewingStartup = false
     var attempts = 0
     var startupErrorShown = false
     private var creditsRequested = false
+    private var updatesRequested = false
     var browserWindows: [NSWindow] = []
     var webViews: [WKWebView] = []
     var adRules: WKContentRuleList?
@@ -178,7 +180,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKUIDelegate, WKNaviga
     var netflixSplit: NSSplitView?
     var netflixFocus: NetflixFocusView?
     var netflixWasFullscreen = false
-    let home = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support/Immersed Mac")
+    let home = ProcessInfo.processInfo.environment["IMMERSED_APP_HOME"].map { URL(fileURLWithPath: $0, isDirectory: true) }
+        ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support/Immersed Mac")
+    let servicePort = ProcessInfo.processInfo.environment["IMMERSED_MAC_PORT"].flatMap(UInt16.init).flatMap { $0 == 0 ? nil : $0 } ?? 4765
+    var serviceURL: String { "http://127.0.0.1:\(servicePort)" }
     var blockAds: Bool { UserDefaults.standard.object(forKey: "blockAds") as? Bool ?? true }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -265,7 +270,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKUIDelegate, WKNaviga
         guard !startupErrorShown else { return }
         startupErrorShown = true
         loading.layer?.removeAllAnimations()
-        alert("immersed could not start", detail)
+        let error = NSAlert()
+        error.messageText = "Immersed could not start"
+        error.informativeText = detail
+        error.addButton(withTitle: "Retry")
+        error.addButton(withTitle: "Close")
+        error.beginSheetModal(for: window) { [weak self] response in
+            guard let self, response == .alertFirstButtonReturn else { return }
+            if self.service?.isRunning == false { self.service = nil }
+            self.attempts = 0
+            self.startupErrorShown = false
+            self.connect()
+        }
     }
     func buildMenu() {
         let menu = NSMenu()
@@ -278,6 +294,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKUIDelegate, WKNaviga
         }
         let appMenu = submenu("immersed.")
         item(appMenu, "About Immersed.", #selector(showCredits), "")
+        item(appMenu, "Check for Updates…", #selector(showAppUpdates), "")
         appMenu.addItem(.separator())
         item(appMenu, "Settings…", #selector(settings), ",")
         appMenu.addItem(.separator())
@@ -301,6 +318,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKUIDelegate, WKNaviga
         fullscreen.keyEquivalentModifierMask = [.control, .command]
         NSApp.mainMenu = menu
     }
+    @objc private func showAppUpdates() {
+        showStudy()
+        if ready { web.evaluateJavaScript("window.immersedCheckForUpdates?.()", completionHandler: nil) }
+        else { updatesRequested = true }
+    }
     @objc private func showCredits() {
         showStudy()
         if ready {
@@ -321,7 +343,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKUIDelegate, WKNaviga
         if let data = try? JSONSerialization.data(withJSONObject: backup), let json = String(data: data, encoding: .utf8) {
             let storageBridge = """
             (() => {
-              if (location.hostname !== '127.0.0.1' || location.port !== '4765') return;
+              if (location.hostname !== '127.0.0.1' || location.port !== '\(servicePort)') return;
               try { for (const [key,value] of Object.entries(\(json))) if (localStorage.getItem(key) === null) localStorage.setItem(key,value); } catch {}
               let timer;
               const save = () => { try { const values={}; for(let i=0;i<localStorage.length;i++){const key=localStorage.key(i);if(key.startsWith('immersed.'))values[key]=localStorage.getItem(key);} window.webkit.messageHandlers.immersed.postMessage({action:'studyStorage',values}); } catch {} };
@@ -376,7 +398,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKUIDelegate, WKNaviga
     func importMedia(_ file: URL) {
         guard ready else { pendingFiles.append(file); return }
         showStudy()
-        var components = URLComponents(string: "http://127.0.0.1:4765/api/desktop/import")!
+        var components = URLComponents(string: serviceURL + "/api/desktop/import")!
         components.queryItems = [URLQueryItem(name: "name", value: file.lastPathComponent)]
         var request = URLRequest(url: components.url!)
         request.httpMethod = "POST"
@@ -502,7 +524,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKUIDelegate, WKNaviga
         let attempt = object["attempt"] as? Int ?? 0
         if captionScanBusy { deliverVideoCaption(key, [], attempt, true, 1); return }
         captionScanBusy = true
-        var components = URLComponents(string: "http://127.0.0.1:4765/api/desktop/caption-frames")!
+        var components = URLComponents(string: serviceURL + "/api/desktop/caption-frames")!
         components.queryItems = [URLQueryItem(name: "videoId", value: id), URLQueryItem(name: "at", value: String(at))]
         var query = URLRequest(url: components.url!); query.timeoutInterval = 40
         URLSession.shared.dataTask(with: query) { [weak self] data, _, _ in
@@ -625,6 +647,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKUIDelegate, WKNaviga
         if netflixView != nil && netflixFocus == nil { netflixWasFullscreen = false; enterNetflixFullscreen() }
     }
     func windowDidResize(_ notification: Notification) { netflixFocus?.needsLayout = true }
+    var lastStudyVisibility: Bool?
+    func updateStudyVisibility() {
+        guard ready else { return }
+        let visible = window.isVisible && !window.isMiniaturized && !NSApp.isHidden && window.occlusionState.contains(.visible)
+        guard visible != lastStudyVisibility else { return }
+        lastStudyVisibility = visible
+        web.evaluateJavaScript("window.immersedWindowVisibility?.(\(visible))", completionHandler: nil)
+    }
+    func windowDidMiniaturize(_ notification: Notification) { updateStudyVisibility() }
+    func windowDidDeminiaturize(_ notification: Notification) { updateStudyVisibility() }
+    func windowDidChangeOcclusionState(_ notification: Notification) { updateStudyVisibility() }
+    func applicationDidHide(_ notification: Notification) { updateStudyVisibility() }
+    func applicationDidUnhide(_ notification: Notification) { updateStudyVisibility() }
+
     @objc func browseYouTube() { openBrowser(URL(string: "https://www.youtube.com/?hl=ja&gl=JP")!) }
     func openBrowser(_ url: URL) {
         if let existing = browserWindows.first {
@@ -651,7 +687,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKUIDelegate, WKNaviga
         }
         if webView === web, navigationAction.targetFrame?.isMainFrame == true,
            navigationAction.navigationType == .linkActivated,
-           url.scheme == "mailto" || (url.scheme == "https" && ["ko-fi.com", "www.reddit.com"].contains(url.host ?? "")) {
+           url.scheme == "mailto" || (url.scheme == "https" && (["ko-fi.com", "www.reddit.com"].contains(url.host ?? "") || (url.host == "github.com" && url.path.range(of: #"^/Somamill/immersed-community/releases/tag/v[0-9]+\.[0-9]+\.[0-9]+$"#, options: .regularExpression) != nil))) {
             decisionHandler(.cancel)
             NSWorkspace.shared.open(url)
             return
@@ -670,7 +706,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKUIDelegate, WKNaviga
     }
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         if webView === web, webView.url?.host == "127.0.0.1" {
+            if !ready { NSLog("Immersed study shell loaded") }
             ready = true
+            lastStudyVisibility = nil
+            updateStudyVisibility()
+            if updatesRequested { updatesRequested = false; showAppUpdates() }
             if creditsRequested {
                 creditsRequested = false
                 showCredits()
@@ -681,47 +721,77 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKUIDelegate, WKNaviga
         }
     }
     func connect() {
-        guard !ready else { return }
-        let url = URL(string: "http://127.0.0.1:4765/")!
-        var request = URLRequest(url: url); request.timeoutInterval = 1
-        URLSession.shared.dataTask(with: request) { [weak self] _, response, error in
+        guard !ready, !terminating else { return }
+        let url = URL(string: serviceURL + "/")!
+        var request = URLRequest(url: URL(string: serviceURL + "/api/desktop/health")!); request.timeoutInterval = 1
+        URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
             Task { @MainActor in
-                guard let self else { return }
-                if error == nil, (response as? HTTPURLResponse)?.statusCode == 200 {
-                    self.web.load(URLRequest(url: url)); return
+                guard let self, !self.ready, !self.terminating else { return }
+                if error == nil, let response = response as? HTTPURLResponse {
+                    let serviceInfo = data.flatMap { try? JSONSerialization.jsonObject(with: $0) } as? [String: String]
+                    let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
+                    if response.statusCode == 200, serviceInfo?["app"] == "immersed-community", serviceInfo?["version"] == version {
+                        self.web.load(URLRequest(url: url))
+                    } else {
+                        self.startupFailed("Close any other copy of Immersed using the local service, then retry.")
+                    }
+                    return
                 }
                 if let service = self.service, !service.isRunning {
-                    self.startupFailed("Local setup stopped. See Library/Application Support/Immersed Mac/startup.log for details.")
+                    self.startupFailed("The local service stopped. See Library/Application Support/Immersed Mac/startup.log for details.")
                     return
                 }
                 if self.service == nil { self.startService() }
                 self.attempts += 1
-                if self.attempts < 900 { DispatchQueue.main.asyncAfter(deadline: .now() + (self.attempts < 20 ? 0.15 : 0.5)) { self.connect() } }
+                if self.attempts < 50 { DispatchQueue.main.asyncAfter(deadline: .now() + (self.attempts < 20 ? 0.15 : 0.5)) { self.connect() } }
                 else { self.startupFailed("Startup is taking longer than expected. Check the startup log in Application Support/Immersed Mac.") }
             }
         }.resume()
+    }
+    func legacyDeveloperID() -> Bool {
+        var code: SecStaticCode?
+        var requirement: SecRequirement?
+        let flags = SecCSFlags(rawValue: 0)
+        let rule = #"anchor apple generic and identifier "com.somamill.immersedmac" and certificate leaf[field.1.2.840.113635.100.6.1.13] exists"#
+        guard SecStaticCodeCreateWithPath(Bundle.main.bundleURL as CFURL, flags, &code) == errSecSuccess,
+              SecRequirementCreateWithString(rule as CFString, flags, &requirement) == errSecSuccess,
+              let code, let requirement else { return false }
+        return SecStaticCodeCheckValidity(code, SecCSFlags(rawValue: kSecCSDoNotValidateResources), requirement) == errSecSuccess
     }
     func startService() {
         let bundled = Bundle.main.resourceURL?.appendingPathComponent("runtime/desktop/launch.sh")
         let launcher = ["/opt/homebrew/bin/immersed-mac", "/usr/local/bin/immersed-mac"].first(where: { FileManager.default.isExecutableFile(atPath: $0) })
         guard launcher != nil || (bundled.map { FileManager.default.fileExists(atPath: $0.path) } ?? false) else {
-            startupFailed("Install with Homebrew: brew install --HEAD Somamill/immersed-community/immersed-mac"); attempts = 900; return
+            startupFailed("Install with Homebrew: brew install --HEAD Somamill/immersed-community/immersed-mac"); attempts = 50; return
         }
         let process = Process()
+        let lifetime = Pipe()
+        process.standardInput = lifetime
+        var environment = ProcessInfo.processInfo.environment
+        environment["IMMERSED_PARENT_PIPE"] = "1"
+        environment["IMMERSED_MAC_PORT"] = String(servicePort)
         if let bundled, FileManager.default.fileExists(atPath: bundled.path) {
+            // Bundled releases predate channel markers; signed releases use this path.
+            let marker = Bundle.main.url(forResource: "InstallChannel", withExtension: nil)
+                .flatMap { try? String(contentsOf: $0, encoding: .utf8) }?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            environment["IMMERSED_INSTALL_CHANNEL"] = marker ?? (legacyDeveloperID() ? "direct" : "development")
             process.executableURL = URL(fileURLWithPath: "/bin/sh")
             process.arguments = [bundled.path, bundled.deletingLastPathComponent().deletingLastPathComponent().path, "--service"]
         } else {
             process.executableURL = URL(fileURLWithPath: launcher!); process.arguments = ["--service"]
         }
+        process.environment = environment
         do {
             try FileManager.default.createDirectory(at: home, withIntermediateDirectories: true)
             let log = home.appendingPathComponent("startup.log")
             FileManager.default.createFile(atPath: log.path, contents: nil)
             let handle = try FileHandle(forWritingTo: log)
             process.standardOutput = handle; process.standardError = handle
-            try process.run(); service = process
-        } catch { startupFailed(error.localizedDescription); attempts = 900 }
+            try process.run()
+            service = process
+            serviceLifetime = lifetime.fileHandleForWriting
+        } catch { startupFailed(error.localizedDescription); attempts = 50 }
     }
     func webView(_ webView: WKWebView, runOpenPanelWith parameters: WKOpenPanelParameters, initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping ([URL]?) -> Void) {
         let panel = NSOpenPanel(); panel.allowsMultipleSelection = parameters.allowsMultipleSelection
@@ -768,7 +838,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKUIDelegate, WKNaviga
         DispatchQueue.main.asyncAfter(deadline: .now() + 2, execute: finish)
         return .terminateLater
     }
-    func applicationWillTerminate(_ notification: Notification) { if service?.isRunning == true { service?.terminate() } }
+    func applicationWillTerminate(_ notification: Notification) {
+        try? serviceLifetime?.close()
+        if service?.isRunning == true { service?.terminate() }
+    }
 }
 @main
 struct ImmersedMain {

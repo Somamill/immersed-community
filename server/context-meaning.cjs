@@ -86,7 +86,7 @@ async function contextMeaning(data) {
   const input = { word: data.word, grammar, selectedRange: [data.start, data.end], dictionaryForm: data.lemma || data.word,
     sentence: data.sentence, before: data.before, after: data.after, choices };
   const key = crypto.createHash('sha256').update(JSON.stringify({ version: VERSION, ...input })).digest('hex');
-  const root = path.resolve(process.env.IMMERSED_DATA_ROOT || path.join(__dirname, '../.data'), 'context-meanings');
+  const root = path.resolve(process.env.IMMERSED_APP_HOME ? require('./data-path.cjs') : process.env.IMMERSED_DATA_ROOT || require('./data-path.cjs'), 'context-meanings');
   const file = path.join(root, key + '.json');
   if (cache.has(key)) return cache.get(key);
   try { const value = JSON.parse(await fs.promises.readFile(file, 'utf8')); if (['ready', 'unclear'].includes(value.status)) { cache.set(key,value); return value; } } catch { /* First lookup. */ }

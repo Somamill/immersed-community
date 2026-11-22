@@ -77,7 +77,7 @@ brew update
 brew upgrade Somamill/immersed-community/immersed-mac
 ```
 
-The first launch prepares the local dictionary and speech tools. See the [Mac guide](docs/MACOS.md) for DMG runtime requirements, HEAD updates, and provider limits.
+The app opens before optional setup. Dictionary, context and speech tools prepare when needed. Settings shows progress and lets you retry a failed setup or check for app updates. See the [Mac guide](docs/MACOS.md) for DMG runtime requirements, HEAD updates, and provider limits.
 
 ## iPhone and iPad
 

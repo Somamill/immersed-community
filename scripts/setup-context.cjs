@@ -1,22 +1,17 @@
 /* Rebuild a reproducible, attributed word-sequence database from an open corpus. */
 const fs = require('node:fs');
 const path = require('node:path');
-const crypto = require('node:crypto');
 const readline = require('node:readline');
-const { execFileSync, spawn } = require('node:child_process');
+const { spawn } = require('node:child_process');
 const { DatabaseSync } = require('node:sqlite');
 const { initialize } = require('../server/language.cjs');
 const { VERSION, gramKey, tokenize } = require('../server/statistical-context.cjs');
-const root = path.join(__dirname, '../.data');
+const root = require('../server/data-path.cjs');
 const source = require('../src/data/context-source.json');
 async function main() {
   fs.mkdirSync(root, { recursive: true });
   const archive = path.join(root, source.asset);
-  if (!fs.existsSync(archive)) {
-    try { execFileSync('curl', ['--fail', '--location', '--retry', '2', '--output', archive, source.archive], { stdio: 'inherit' }); }
-    catch { execFileSync('curl', ['--fail', '--location', '--retry', '2', '--output', archive, source.upstream], { stdio: 'inherit' }); }
-  }
-  if (crypto.createHash('sha256').update(fs.readFileSync(archive)).digest('hex') !== source.sha256) throw new Error('Corpus checksum mismatch');
+  require('./pinned-download.cjs')(archive, source.sha256, [source.archive, source.upstream]);
   const file = path.join(root, 'context-ngrams.sqlite'), temporary = file + '.building';
   fs.rmSync(temporary, { force: true });
   const db = new DatabaseSync(temporary);

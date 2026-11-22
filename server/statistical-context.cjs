@@ -2,7 +2,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { DatabaseSync } = require('node:sqlite');
-const FILE = path.join(__dirname, '../.data/context-ngrams.sqlite');
+const FILE = path.join(require('./data-path.cjs'), 'context-ngrams.sqlite');
 const VERSION = 'jpn-tatoeba-trigram-v1';
 const gramKey = tokens => tokens.join('\u001f');
 const lexical = token => token.basic_form && token.basic_form !== '*' ? token.basic_form : token.surface_form;

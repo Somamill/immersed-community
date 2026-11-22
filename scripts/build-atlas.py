@@ -4,6 +4,7 @@ import json
 import os
 from pathlib import Path
 import re
+import shutil
 import sqlite3
 import urllib.request
 import zipfile
@@ -13,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def build():
     spec = json.loads(Path(os.environ.get('KOTOBA_ATLAS_SPEC', ROOT / 'dictionary.json')).read_text())
-    folder = ROOT / '.data'
+    folder = Path(os.environ.get('IMMERSED_APP_HOME', ROOT)) / '.data'
     folder.mkdir(exist_ok=True)
     out = Path(os.environ.get('KOTOBA_ATLAS_OUTPUT', folder / 'kotoba-atlas.db'))
     out.parent.mkdir(parents=True, exist_ok=True)
@@ -26,14 +27,16 @@ def build():
             except sqlite3.DatabaseError:
                 pass
     source = Path(os.environ.get('KOTOBA_ATLAS_ARCHIVE', folder / spec['archive']))
-    if not source.exists():
+    if not source.exists() or hashlib.sha256(source.read_bytes()).hexdigest() != spec['sha256']:
         partial = source.with_suffix('.part')
-        import socket
-        socket.setdefaulttimeout(30)
-        urllib.request.urlretrieve(spec['url'], partial)
-        partial.replace(source)
-    if hashlib.sha256(source.read_bytes()).hexdigest() != spec['sha256']:
-        raise RuntimeError('Kotoba Atlas checksum mismatch; the existing database was not changed')
+        try:
+            with urllib.request.urlopen(spec['url'], timeout=30) as response, partial.open('wb') as target:
+                shutil.copyfileobj(response, target)
+            if hashlib.sha256(partial.read_bytes()).hexdigest() != spec['sha256']:
+                raise RuntimeError('Kotoba Atlas checksum mismatch; the existing database was not changed')
+            partial.replace(source)
+        finally:
+            partial.unlink(missing_ok=True)
     temporary = out.with_suffix('.building')
     temporary.unlink(missing_ok=True)
     db = sqlite3.connect(temporary)

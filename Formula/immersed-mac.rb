@@ -14,6 +14,8 @@ class ImmersedMac < Formula
     libexec.install Dir["*"]
     (bin/"immersed-mac").write <<~EOS
       #!/bin/sh
+      export IMMERSED_INSTALL_CHANNEL=brew
+      export IMMERSED_BUNDLE_RUNTIME=1
       export PATH="#{Formula["python@3.13"].opt_bin}:#{HOMEBREW_PREFIX}/bin:$PATH"
       exec /bin/sh "#{libexec}/desktop/launch.sh" "#{libexec}" "$@"
     EOS
@@ -24,7 +26,7 @@ class ImmersedMac < Formula
       Start Immersed with: immersed-mac
       The first launch also installs immersed.app in ~/Applications so it
       can be opened from Finder, Spotlight, or Launchpad.
-      First launch installs the local dictionary and speech model. A video must
+      Dictionary and speech resources are prepared when needed. A video must
       allow playback and local audio access for transcription to work.
     EOS
   end

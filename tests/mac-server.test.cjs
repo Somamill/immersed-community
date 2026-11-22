@@ -14,6 +14,8 @@ test("local API rejects cross-origin mutation and invalid media identifiers", as
   });
   const base = "http://127.0.0.1:" + server.address().port;
   const shared = base + "/api/immersion/reflow";
+  assert.deepEqual(await (await fetch(base + "/api/desktop/health")).json(),
+    { app: "immersed-community", version: require("../package.json").version });
   for (const headers of [
     {},
     { "X-Immersed-Request": "1", Origin: "https://untrusted.example" },

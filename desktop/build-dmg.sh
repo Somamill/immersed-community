@@ -4,12 +4,13 @@ source_dir="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 output="${1:-$source_dir/work/releases}"
 mkdir -p "$output"
 output="$(CDPATH= cd -- "$output" && pwd)"
-version="$(node -p "require('$source_dir/package.json').version")"
+version="$(node -p 'require(process.argv[1]).version' "$source_dir/package.json")"
 stage="$(mktemp -d "${TMPDIR:-/tmp}/immersed-dmg.XXXXXX")"
 trap 'rm -rf "$stage"' EXIT HUP INT TERM
 IMMERSED_APPLICATIONS_DIR="$stage" IMMERSED_BUNDLE_RUNTIME=1 /bin/sh "$source_dir/desktop/install-app.sh" "$source_dir"
 COPYFILE_DISABLE=1 tar -czf "$output/immersed-mac-$version.tar.gz" -C "$stage/immersed.app/Contents/Resources/runtime" .
 (cd "$output" && shasum -a 256 "immersed-mac-$version.tar.gz" > "immersed-mac-$version.tar.gz.sha256")
+rm -f "$stage/.immersed-install.lock"
 ln -s /Applications "$stage/Applications"
 cat > "$stage/Read me.txt" <<'EOF'
 Immersed, full-feature Apple Silicon edition
@@ -24,12 +25,12 @@ For an existing Homebrew installation:
 Drag immersed.app into Applications, or replace your existing copy in
 ~/Applications. Keep only the copy you use to avoid duplicate Spotlight entries.
 This app includes the full study backend. Node, Python, FFmpeg and yt-dlp are
-provided by Homebrew; dictionaries and speech models download on first use.
+provided by Homebrew; dictionaries and speech models are prepared on demand.
 
 Source and release notes: https://github.com/Somamill/immersed-community
 EOF
 if [ -z "${IMMERSED_SIGN_IDENTITY:-}" ]; then
-  printf '\nSigning status: unsigned preview, not notarized. Prefer the Homebrew source installation.\n' >> "$stage/Read me.txt"
+  printf '\nSigning status: ad-hoc development preview without notarization. Prefer the Homebrew source installation.\n' >> "$stage/Read me.txt"
 fi
 dmg="$output/immersed-$version-arm64.dmg"
 if diskutil image create from --help >/dev/null 2>&1; then
