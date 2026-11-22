@@ -675,7 +675,7 @@ async function fallback(req, res) {
   }
   if (url.pathname === "/credits/credits.json")
     return json(res, 200, require("./macos-app/credits/credits.json"));
-  if (["/credits/kofi.png", "/credits/reddit.png"].includes(url.pathname)) {
+  if (["/credits/kofi.png", "/credits/reddit.png", "/credits/kotoba-atlas.png"].includes(url.pathname)) {
     res.writeHead(200, { "Content-Type": "image/png" });
     return fs.createReadStream(path.join(__dirname, "macos-app", url.pathname.slice(1))).pipe(res);
   }

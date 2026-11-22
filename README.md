@@ -48,7 +48,7 @@ Search vocabulary in Japanese, English, or German. Choose the dictionary languag
 ## A dictionary built for Japanese subtitles
 
 - **Look up what was actually written.** Immersed groups Japanese compounds and common conjugations while preserving the original caption. Lookups can show the dictionary form, reading, grammar, and optional pitch accent.
-- **Find the sense that fits the line.** Kotoba Atlas offers English or German definitions. Surrounding captions, grammar, and local context ranking help pick a relevant existing sense. Other dictionary senses remain available.
+- **Find the sense that fits the line.** <a href="https://github.com/Somamill/kotoba-atlas"><img src="desktop/macos-app/credits/kotoba-atlas.png" width="20" height="20" alt=""> Kotoba Atlas</a> offers English or German definitions. Surrounding captions, grammar, and local context ranking help pick a relevant existing sense. Other dictionary senses remain available.
 - **Spend your attention on new words.** Set your JLPT level to tune highlighting and optional furigana. Known, learning, and ignored words follow your choices. The vocabulary percentage estimates familiarity with the current caption sample.
 - **Keep generated text in perspective.** Compare local speech models or check generated captions against readable Japanese text on the video when available. Speech recognition and dictionary rankings can still make mistakes.
 

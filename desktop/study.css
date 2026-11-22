@@ -1239,3 +1239,6 @@ html[data-dot-theme] body button.understanding { background: transparent; border
 .creditLink { display: flex; align-items: center; gap: 10px; width: fit-content; min-height: 44px; color: var(--dot-accent); }
 .creditLink img { flex: 0 0 32px; border-radius: 7px; }
 .creditLink:focus-visible { outline: 2px solid var(--dot-accent); outline-offset: 3px; }
+
+.atlasHeading { display: flex; align-items: center; gap: 8px; }
+.atlasHeading img { flex: 0 0 auto; }
