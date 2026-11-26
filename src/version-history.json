@@ -1,5 +1,15 @@
 [
   {
+    "version": "0.22.14",
+    "date": "2026-11-26",
+    "title": "Green Mac appearance",
+    "notes": [
+      "Restore the green Immersed palette in light and dark appearance, including playback and progress controls.",
+      "Open the player and library before optional setup, avoid hidden subtitle polling, and add channel-aware app update checks and recoverable installs."
+    ],
+    "changelogFormat": 1
+  },
+  {
     "version": "0.22.13",
     "date": "2026-11-20",
     "title": "Credits and a Mac-first project guide",

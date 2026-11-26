@@ -67,7 +67,7 @@ test('marked-word milestones count real choices and unknown highlights are disti
  await page.evaluate(()=>(window as any).eval(`openLookup({text:'猫',lemma:'猫',reading:'ねこ'},true)`));
  await page.locator('#wordStates').getByRole('button',{name:'Mark unknown',exact:true}).click();
  const word=page.getByRole('button',{name:'Look up 猫',exact:true});await expect(word).toHaveClass(/unknown/);
- expect(await word.evaluate(e=>getComputedStyle(e).borderBottomWidth)).toBe('2px');
+ await expect(word).toHaveCSS('border-bottom-width','2px');
  await page.locator('#wordStates').getByRole('button',{name:'Mark known',exact:true}).click();await expect(page.locator('#learningFeedback')).toHaveText('10 words marked known');
  await page.locator('#wordStates').getByRole('button',{name:'Mark known',exact:true}).click();expect(await page.evaluate(()=>(window as any).eval('Object.values(prefs.knowledge).filter(x=>x===true).length'))).toBe(10);
  await page.locator('#closeLookup').click();await page.getByRole('button',{name:'Words',exact:true}).click();await expect(page.locator('#panelBody')).toContainText('10 / 20 words marked known');
@@ -122,4 +122,19 @@ test('lookup motion is brief and respects Reduce Motion',async({page})=>{
  expect(await page.locator('#lookup').evaluate(n=>getComputedStyle(n).animationDuration)).toBe('0.12s');
  await page.emulateMedia({reducedMotion:'reduce'});
  expect(await page.locator('#lookup').evaluate(n=>getComputedStyle(n).animationName)).toBe('none');
+});
+
+test("the community palette uses green surfaces, accents and controls in both appearances", async ({ page }) => {
+  await page.goto("/");
+  for (const [dark, background, surface, accent] of [
+    [true, "rgb(16, 25, 19)", "rgb(25, 38, 30)", "rgb(182, 227, 196)"],
+    [false, "rgb(243, 248, 242)", "rgb(252, 254, 252)", "rgb(66, 104, 75)"],
+  ] as const) {
+    await page.evaluate(dark => window.eval(`prefs.dark = ${dark}; applyPreferences()`), dark);
+    await expect(page.locator("html")).toHaveCSS("color-scheme", dark ? "dark" : "light");
+    await expect(page.locator("body")).toHaveCSS("background-color", background);
+    await expect(page.locator("header")).toHaveCSS("background-color", surface);
+    await expect(page.locator("#play")).toHaveCSS("background-color", accent);
+    await expect(page.locator("#speechBar")).toHaveCSS("accent-color", accent);
+  }
 });

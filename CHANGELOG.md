@@ -4,6 +4,15 @@ Dates use Asia/Tokyo. Each released update has a matching Git tag and GitHub Rel
 
 ## [Unreleased]
 
+## [0.22.14] - 2026-11-26
+
+Green Mac appearance
+
+### Changed
+
+- Restore the green Immersed palette in light and dark appearance, including playback and progress controls.
+- Open the player and library before optional setup, avoid hidden subtitle polling, and add channel-aware app update checks and recoverable installs.
+
 ## [0.22.13] - 2026-11-20
 
 Credits and a Mac-first project guide

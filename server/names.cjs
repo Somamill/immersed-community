@@ -4,7 +4,7 @@ let db;
 const normalize = text => (text || '').normalize('NFKC').toLowerCase().replace(/[ァ-ヶ]/g, c => String.fromCharCode(c.charCodeAt(0) - 0x60)).trim();
 function database() {
   if (!db) {
-    const file = path.join(__dirname, '../.data/names.sqlite');
+    const file = path.join(require('./data-path.cjs'), 'names.sqlite');
     if (!fs.existsSync(file)) return null;
     const { DatabaseSync } = require('node:sqlite');
     db = new DatabaseSync(file, { readOnly: true });

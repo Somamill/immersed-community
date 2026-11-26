@@ -403,7 +403,7 @@ test("inflected dictionary lookup, compound hover and quiet gaps work without ma
   await expect(page.locator("#panelBody")).toContainText("吸い取る");
 });
 
-test("temporary subtitle failures recover automatically with no regenerate control", async ({
+test("temporary subtitle failures offer an explicit retry and remove it after recovery", async ({
   page,
 }) => {
   let attempts = 0;
@@ -429,11 +429,15 @@ test("temporary subtitle failures recover automatically with no regenerate contr
       "source={type:'youtube',id:'abcdefghijk'};youtube={getCurrentTime:()=>1,getPlayerState:()=>2};void beginTranscript();",
     ),
   );
+  const retry = page.getByRole("button", { name: "Retry subtitles" });
+  await expect(retry).toBeVisible();
+  expect(attempts).toBe(1);
+  await retry.click();
   await expect(
     page.getByRole("button", { name: "Look up 回復しました", exact: true }),
   ).toBeVisible();
   expect(attempts).toBe(2);
-  await expect(page.locator("#retry")).toHaveCount(0);
+  await expect(retry).toBeHidden();
 });
 
 test("repairs the forced large-v3 default and preserves kanji, reading preferences and later model choices", async ({
@@ -858,7 +862,7 @@ test('native audience preference is shared by Discover and Settings',async({page
  await expect(page.locator('#panelBody').getByLabel('Native audience',{exact:true})).not.toBeChecked();
 });
 
-test('returning to a paused preparation resumes it automatically',async({page})=>{
+test('returning to a paused preparation requires an explicit resume',async({page})=>{
  let posts=0,gets=0;
  await page.route('**/api/desktop/transcribe?**',route=>{
   if(route.request().method()==='POST'){posts++;return route.fulfill({json:{status:'queued'}});}
@@ -867,6 +871,10 @@ test('returning to a paused preparation resumes it automatically',async({page})=
  });
  await page.goto('/');
  await page.evaluate(()=>(window as any).eval(`source={type:'youtube',id:'aaaaaaaaaaa',title:'話'};youtube={getCurrentTime:()=>.2,getPlayerState:()=>2};beginTranscript();`));
+ const resume = page.getByRole('button', { name: 'Resume subtitles' });
+ await expect(resume).toBeVisible();
+ expect(posts).toBe(1);
+ await resume.click();
  await expect(page.locator('#count')).toHaveText('1 segments');
  expect(posts).toBe(2);
 });
@@ -965,7 +973,7 @@ test('original local subtitles ignore generated-word joins and retain their auth
   youtube={getCurrentTime:()=>0.5,getPlayerState:()=>2,pauseVideo:()=>{}};
   source={type:'local',id:'original-test',duration:2};
   readingJoins.set(ImmersedReadingCues.groupKey(${JSON.stringify(cues)}),true);
-  await pollTranscript('desktop/local-transcript',{id:'original-test'},requestGeneration);
+  await beginTranscript();
  })()`),original);
  await expect.poll(()=>page.locator('.line').evaluate(node=>{const copy=node.cloneNode(true) as HTMLElement;copy.querySelectorAll('rt').forEach(rt=>rt.remove());return copy.textContent;})).toBe('読');
  expect(await page.evaluate(()=>(window as any).eval('cues'))).toEqual(original);

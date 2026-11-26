@@ -14,7 +14,7 @@ const hira = text => (text || '').replace(/[ァ-ヶ]/g, c => String.fromCharCode
 const posLabels = { 名詞: 'noun', 動詞: 'verb', 形容詞: 'adjective', 助詞: 'particle', 助動詞: 'auxiliary', 副詞: 'adverb', 接続詞: 'conjunction', 連体詞: 'determiner', 記号: 'punctuation', 接頭詞: 'prefix', 感動詞: 'interjection', フィラー: 'interjection' };
 async function initialize() {
   if (!ready) ready = (async () => {
-    const dictionary = JSON.parse(await fs.promises.readFile(path.join(__dirname, '../.data/jmdict.json'), 'utf8'));
+    const dictionary = JSON.parse(await fs.promises.readFile(path.join(require('./data-path.cjs'), 'jmdict.json'), 'utf8'));
     const index = new Map();
     for (const entry of dictionary.words) {
       for (const form of new Set([...entry.kanji, ...entry.kana].map(k => k.text))) {

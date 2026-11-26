@@ -2,18 +2,17 @@ const http = require("node:http"),
   fs = require("node:fs"),
   path = require("node:path"),
   os = require("node:os");
-const { execFile, spawn } = require("node:child_process");
-const { promisify } = require("node:util");
+const { spawn } = require("node:child_process");
 const focusedSpeech = require("./focused-speech.cjs");
 const { createMedia } = require("./media.cjs");
 const { createSearch } = require("./search.cjs");
 const youtubeMetadata = require("./youtube-metadata.cjs").createYouTubeMetadata();
 const { createCaptionFrames } = require("./caption-frames.cjs");
 const { parseYouTubeCaptions, captionFormat, normalizeCaptionCache } = require("./captions.cjs");
-const api = require("../server/middleware.cjs");
+const { desktopSetup } = require("./setup.cjs");
+const { run: execute, signalGroup } = require("./process.cjs");
 const anki = require("./anki.cjs").createAnki();
 const processAbort = new AbortController();
-const execute = promisify(execFile);
 const run = (file, args, options = {}) =>
     execute(file, args, { ...options, signal: options.signal ? AbortSignal.any([processAbort.signal, options.signal]) : processAbort.signal }),
   root = path.join(__dirname, ".."),
@@ -22,6 +21,11 @@ const run = (file, args, options = {}) =>
     ".data/mac-transcripts-v2",
   );
 fs.mkdirSync(cache, { recursive: true });
+const setup = process.env.IMMERSED_APP_HOME ? desktopSetup(process.env.IMMERSED_APP_HOME, root) : null;
+const appUpdates = require("./app-updates.cjs").createAppUpdates({
+  home: process.env.IMMERSED_DATA_ROOT || root, version: require("../package.json").version,
+  channel: process.env.IMMERSED_INSTALL_CHANNEL || "development", signal: processAbort.signal,
+});
 const atlasUpdates = require('./atlas-updates.cjs').createAtlasUpdater({root,run});
 const captionFrames = createCaptionFrames({ run, root: path.join(process.env.IMMERSED_DATA_ROOT || root, ".data/caption-frames") });
 let foregroundSpeech = null;
@@ -49,7 +53,7 @@ function ensureSpeechWorker() {
   const child = spawn(
     python,
     [path.join(__dirname, "transcribe.py"), "--worker"],
-    { stdio: ["pipe", "pipe", "pipe"] },
+    { stdio: ["pipe", "pipe", "pipe"], detached: true },
   );
   worker = child;
   speechChildren.add(child);
@@ -62,7 +66,7 @@ function ensureSpeechWorker() {
   child.stdout.on("data", (chunk) => {
     buffer += chunk;
     if (buffer.length > 20 * 1024 * 1024) {
-      child.kill();
+      signalGroup(child, "SIGTERM");
       return;
     }
     let newline;
@@ -128,8 +132,7 @@ function pumpSpeech() {
       if (!activeSpeech && worker) {
         const old = worker;
         worker = null;
-        speechChildren.delete(old);
-        old.kill();
+        signalGroup(old, "SIGTERM");
       }
     }, 120000);
     idleWorkerTimer.unref();
@@ -141,7 +144,7 @@ function pumpSpeech() {
   activeSpeech = task;
   const child = ensureSpeechWorker();
   task.timer = setTimeout(() => {
-    if (activeSpeech === task) child.kill();
+    if (activeSpeech === task) signalGroup(child, "SIGTERM");
   }, 15 * 60_000);
   child.stdin.write(
     JSON.stringify({
@@ -180,6 +183,12 @@ async function recognize(
   quality = "balanced",
   options = {},
 ) {
+  if (setup) {
+    onProgress({ status: "processing", stage: "Checking speech setup", phase: "loading" });
+    await setup.speech();
+  }
+  processAbort.signal.throwIfAborted();
+  if (pausedSpeech.has(options.owner)) throw Object.assign(Error("Preparation paused"), { code: "BACKGROUND_PAUSED" });
   if (Number.isFinite(options.duration))
     return speechSlice(
       audio,
@@ -490,6 +499,8 @@ async function fallback(req, res) {
     return json(res, 200, await anki.submit(JSON.parse(Buffer.concat(chunks).toString("utf8"))));
   }
   if (url.pathname === "/api/desktop/dictionary-update" && ["GET","POST"].includes(req.method)) {
+    if (setup && setup.info("dictionary").status !== "ready")
+      return json(res, 409, { error: "Prepare the dictionary before checking for dictionary updates." });
     const language=url.searchParams.get("language");
     if(language && !["en","de"].includes(language))return json(res,400,{error:"Choose English or German."});
     try { return json(res,200,req.method === "POST" ? await atlasUpdates.start(language) : url.searchParams.get("check") === "1" ? await atlasUpdates.check() : atlasUpdates.info()); }
@@ -570,8 +581,10 @@ async function fallback(req, res) {
     const id = url.searchParams.get("id");
     if (!media.get(id)) return json(res, 404, { error: "Media not found" });
     if (req.method === "POST") {
-      foregroundSpeech = null;
-      for (const controller of videoPreparations.values()) controller.abort();
+      if (url.searchParams.get("prefetch") !== "true") {
+        foregroundSpeech = null;
+        for (const controller of videoPreparations.values()) controller.abort();
+      }
     }
     return json(
       res,
@@ -685,7 +698,15 @@ async function fallback(req, res) {
   }
   return json(res, 404, { error: "Not found" });
 }
-const handler = api(fallback);
+let languageHandler, preparingContext;
+function prepareContext(retry = false) {
+  preparingContext ||= setup.language({ retry }).then(() => {
+    // Phrase data can improve lookups without the optional model.
+    void setup.ensure("statistics", { retry }).catch(() => {});
+    return setup.context({ retry });
+  }).finally(() => { preparingContext = undefined; });
+  return preparingContext;
+}
 const server = http.createServer(async (req, res) => {
   if (!/^(127\.0\.0\.1|localhost)(:\d+)?$/.test(req.headers.host || ""))
     return json(res, 403, { error: "Local access only" });
@@ -700,7 +721,47 @@ const server = http.createServer(async (req, res) => {
   )
     return json(res, 403, { error: "Local origin required" });
   try {
-    await handler(req, res, () => fallback(req, res));
+    const url = new URL(req.url, "http://localhost");
+    if (url.pathname === "/api/desktop/health" && req.method === "GET")
+      return json(res, 200, { app: "immersed-community", version: appUpdates.info().version });
+    if (url.pathname === "/api/desktop/app-update" && ["GET", "POST"].includes(req.method)) {
+      if (req.method === "GET") return json(res, 200, appUpdates.info());
+      const action = url.searchParams.get("action");
+      if (action === "check") return json(res, 200, await appUpdates.check());
+      if (action === "auto") return json(res, 200, appUpdates.setAutomatic(url.searchParams.get("enabled") === "true"));
+      if (action === "foreground") return json(res, 200, await appUpdates.automatic());
+      return json(res, 400, { error: "Unknown update action" });
+    }
+    if (url.pathname === "/api/desktop/setup" && ["GET", "POST"].includes(req.method)) {
+      const feature = url.searchParams.get("feature");
+      if (setup && req.method === "POST") {
+        if (feature === "dictionary") void setup.language({ retry: true }).catch(() => {});
+        else if (feature === "context") void prepareContext(true).catch(() => {});
+        else if (feature === "speech") void setup.speech({ retry: true }).catch(() => {});
+        else return json(res, 400, { error: "Unknown setup feature" });
+      }
+      return json(res, 200, setup?.statuses() || {});
+    }
+    if (url.pathname.startsWith("/api/immersion/")) {
+      if (setup) {
+        if (setup.info("dependencies").status !== "ready" || setup.info("dictionary").status !== "ready") {
+          void setup.language().catch(() => {});
+          return json(res, 503, { error: "Dictionary setup is pending. Check its progress or retry in Settings." });
+        }
+        if (!languageHandler) setup.activateNode();
+        if (url.pathname.endsWith("/context-meaning") && !setup.contextReady()) {
+          void prepareContext().catch(() => {});
+          return json(res, 200, { status: "unavailable" });
+        }
+      }
+      if (!languageHandler && !setup) {
+        process.env.NODE_PATH = [path.join(__dirname, "node_modules"), process.env.NODE_PATH].filter(Boolean).join(path.delimiter);
+        require("node:module")._initPaths();
+      }
+      languageHandler ||= require("../server/middleware.cjs")(fallback);
+      return await languageHandler(req, res, () => fallback(req, res));
+    }
+    await fallback(req, res);
   } catch (error) {
     if (!res.headersSent)
       json(res, 400, { error: String(error.message).slice(0, 240) });
@@ -713,13 +774,28 @@ if (require.main === module)
     "127.0.0.1",
     () => console.log("immersed. local service ready"),
   );
-process.once("SIGTERM", () => {
+function shutdown() {
+  if (speechStopping) return;
   speechStopping = true;
   for (const task of speechQueue.splice(0))
     task.reject(Error("Speech service is stopping"));
   processAbort.abort();
-  for (const child of speechChildren) child.kill("SIGTERM");
-  server.close(() => process.exit(0));
-  setTimeout(() => process.exit(0), 1000).unref();
-});
+  setup?.stop();
+  if (languageHandler) require("../server/context-meaning.cjs").stop();
+  for (const child of speechChildren) signalGroup(child, "SIGTERM");
+  server.close();
+  setTimeout(() => {
+    setup?.kill();
+    for (const child of speechChildren) signalGroup(child, "SIGKILL");
+    process.exit(0);
+  }, 1000);
+}
+if (require.main === module) {
+  if (process.env.IMMERSED_PARENT_PIPE === "1") {
+    process.stdin.once("end", shutdown);
+    process.stdin.resume();
+  }
+  process.once("SIGTERM", shutdown);
+  process.once("SIGINT", shutdown);
+}
 module.exports = { server, validId, originalLanguage };

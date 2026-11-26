@@ -5,7 +5,7 @@ function lookup(word, reading) {
   if (!index) {
     index = new Map();
     try {
-      for (const line of fs.readFileSync(path.join(__dirname, '../.data/accents.txt'), 'utf8').split('\n')) {
+      for (const line of fs.readFileSync(path.join(require('./data-path.cjs'), 'accents.txt'), 'utf8').split('\n')) {
         const [form, kana, accents] = line.trim().split('\t');
         if (!form || !kana || !accents) continue;
         const values = accents.split(',').filter(n => /^\d+$/.test(n)).map(n => ({ reading: kana, downstep: Number(n) }));
