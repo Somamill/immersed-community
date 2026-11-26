@@ -216,7 +216,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKUIDelegate, WKNaviga
         window.titleVisibility = .hidden
         window.titlebarAppearsTransparent = true
         window.titlebarSeparatorStyle = .none
-        window.backgroundColor = NSColor(calibratedRed: 21/255, green: 24/255, blue: 21/255, alpha: 1)
+        window.backgroundColor = NSColor(calibratedRed: 16/255, green: 25/255, blue: 19/255, alpha: 1)
         window.isMovableByWindowBackground = true
         window.collectionBehavior.insert(.fullScreenPrimary)
         window.isReleasedWhenClosed = false
@@ -241,7 +241,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKUIDelegate, WKNaviga
         let surface = window.contentView!
         loading = NSView(frame: surface.bounds)
         loading.autoresizingMask = [.width, .height]; loading.wantsLayer = true
-        loading.layer?.backgroundColor = NSColor(calibratedRed: 21/255, green: 24/255, blue: 21/255, alpha: 1).cgColor
+        loading.layer?.backgroundColor = NSColor(calibratedRed: 16/255, green: 25/255, blue: 19/255, alpha: 1).cgColor
         surface.addSubview(loading, positioned: .above, relativeTo: web)
         let artwork = StartupArtworkView(animate: preview || !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion)
         artwork.translatesAutoresizingMaskIntoConstraints = false

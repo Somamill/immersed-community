@@ -1,6 +1,6 @@
 {
   "name": "immersed-community",
-  "version": "0.22.13",
+  "version": "0.22.14",
   "scripts": {
     "language:setup": "node scripts/setup-dictionary.cjs",
     "test:language": "node --test tests/language.test.cjs tests/atlas.test.cjs",

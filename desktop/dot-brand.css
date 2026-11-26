@@ -1,9 +1,27 @@
 /* Hallmark · shape: app screen · genre: media library · theme: existing dot. identity */
 /* Refinement: preserve task layouts and content; share semantic roles and control rhythm. */
-:root { --dot-font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; --dot-oled-background: #000; --dot-oled-surface: #101010; --dot-shell-shadow: 0 8px 24px #00000018; --immersed-accent-dark: #b6e3c4; --immersed-on-accent-dark: #11281b; --immersed-accent-light: #42684b; --immersed-on-accent-light: #fff; }
-html[data-dot-theme="dark"] { --dot-accent: var(--immersed-accent-dark); --dot-on-accent: var(--immersed-on-accent-dark); }
-html[data-dot-theme="light"] { --dot-accent: var(--immersed-accent-light); --dot-on-accent: var(--immersed-on-accent-light); }
-html[data-dot-theme] { accent-color: var(--dot-accent); scrollbar-color: var(--dot-border) var(--dot-background); }
+:root { --dot-font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; --dot-oled-background: #000; --dot-oled-surface: #101010; --dot-shell-shadow: 0 8px 24px #00000018; }
+/* The community Mac app keeps its green palette when the shared kit is refreshed. */
+html[data-dot-theme="dark"] {
+  color-scheme: dark;
+  --dot-background: #101913;
+  --dot-surface: #19261e;
+  --dot-border: #354a3b;
+  --dot-accent-immersed: #b6e3c4;
+  --dot-on-accent: #11281b;
+}
+html[data-dot-theme="light"] {
+  color-scheme: light;
+  --dot-background: #f3f8f2;
+  --dot-surface: #fcfefc;
+  --dot-accent-immersed: #42684b;
+  --dot-on-accent: #fff;
+}
+html[data-dot-theme] {
+  --dot-accent: var(--dot-accent-immersed);
+  accent-color: var(--dot-accent);
+  scrollbar-color: var(--dot-border) var(--dot-background);
+}
 body { font-family: var(--dot-font-ui); }
 ::selection { background: var(--dot-accent); color: var(--dot-on-accent); }
 input, textarea { caret-color: var(--dot-accent); }

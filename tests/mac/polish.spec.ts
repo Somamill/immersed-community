@@ -123,3 +123,18 @@ test('lookup motion is brief and respects Reduce Motion',async({page})=>{
  await page.emulateMedia({reducedMotion:'reduce'});
  expect(await page.locator('#lookup').evaluate(n=>getComputedStyle(n).animationName)).toBe('none');
 });
+
+test("the community palette uses green surfaces, accents and controls in both appearances", async ({ page }) => {
+  await page.goto("/");
+  for (const [dark, background, surface, accent] of [
+    [true, "rgb(16, 25, 19)", "rgb(25, 38, 30)", "rgb(182, 227, 196)"],
+    [false, "rgb(243, 248, 242)", "rgb(252, 254, 252)", "rgb(66, 104, 75)"],
+  ] as const) {
+    await page.evaluate(dark => window.eval(`prefs.dark = ${dark}; applyPreferences()`), dark);
+    await expect(page.locator("html")).toHaveCSS("color-scheme", dark ? "dark" : "light");
+    await expect(page.locator("body")).toHaveCSS("background-color", background);
+    await expect(page.locator("header")).toHaveCSS("background-color", surface);
+    await expect(page.locator("#play")).toHaveCSS("background-color", accent);
+    await expect(page.locator("#speechBar")).toHaveCSS("accent-color", accent);
+  }
+});
